@@ -14,7 +14,8 @@ import {
   ChannelType,
   RefreshTokenRecord,
   User,
-  UserCredentials
+  UserCredentials,
+  UserRole
 } from '../domain/types';
 import {
   AlertModelRepository,
@@ -243,7 +244,7 @@ export class GoogleSheetsRepository
       id: map['id'],
       email: map['email'],
       name: map['name'],
-      role: (map['role'] as User['role']) || 'admin',
+      role: (map['role'] as UserRole) || 'admin',
       status: (map['status'] as User['status']) || 'active',
       createdAt: map['created_at'] || '',
       updatedAt: map['updated_at'] || map['created_at'] || '',

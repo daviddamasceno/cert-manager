@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { alertModelService } from '../services/container';
+import { requireRoles } from '../middlewares/rbacMiddleware';
 
 export const alertModelController = Router();
 
@@ -8,7 +9,7 @@ alertModelController.get('/', async (_req, res) => {
   res.json(models);
 });
 
-alertModelController.post('/', async (req, res) => {
+alertModelController.post('/', requireRoles('admin', 'editor'), async (req, res) => {
   try {
     const created = await alertModelService.create(req.body);
     res.status(201).json(created);
@@ -17,7 +18,7 @@ alertModelController.post('/', async (req, res) => {
   }
 });
 
-alertModelController.put('/:id', async (req, res) => {
+alertModelController.put('/:id', requireRoles('admin', 'editor'), async (req, res) => {
   try {
     const updated = await alertModelService.update(req.params.id, req.body);
     res.json(updated);
@@ -26,7 +27,7 @@ alertModelController.put('/:id', async (req, res) => {
   }
 });
 
-alertModelController.delete('/:id', async (req, res) => {
+alertModelController.delete('/:id', requireRoles('admin', 'editor'), async (req, res) => {
   await alertModelService.delete(req.params.id);
   res.status(204).send();
 });

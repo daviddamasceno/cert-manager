@@ -8,7 +8,7 @@ import {
   UserCredentialsRepository,
   UserRepository
 } from '../repositories/interfaces';
-import { RefreshTokenRecord, User } from '../domain/types';
+import { RefreshTokenRecord, User, UserRole } from '../domain/types';
 import { parseDurationToMilliseconds, parseDurationToSeconds } from '../utils/duration';
 
 export interface LoginResult {
@@ -25,7 +25,7 @@ export interface AuthContext {
 export interface AccessTokenPayload extends JwtPayload {
   sub: string;
   email: string;
-  role: 'admin' | 'viewer';
+  role: UserRole;
   type: 'access';
 }
 

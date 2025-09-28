@@ -82,11 +82,13 @@ export interface AuditLog {
 
 export type UserStatus = 'active' | 'inactive';
 
+export type UserRole = 'admin' | 'editor' | 'viewer';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'viewer';
+  role: UserRole;
   status: UserStatus;
   createdAt: string;
   updatedAt: string;
