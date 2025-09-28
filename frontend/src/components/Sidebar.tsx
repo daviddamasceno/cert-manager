@@ -4,20 +4,25 @@ import {
   DocumentDuplicateIcon,
   BellAlertIcon,
   AdjustmentsHorizontalIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
+import { useAuth } from '../context/AuthContext';
 
 const navigation = [
-  { name: 'Dashboard', to: '/dashboard', icon: HomeIcon },
-  { name: 'Certificados', to: '/certificates', icon: DocumentDuplicateIcon },
-  { name: 'Modelos de alerta', to: '/alert-models', icon: BellAlertIcon },
-  { name: 'Canais', to: '/channels', icon: AdjustmentsHorizontalIcon },
-  { name: 'Logs de auditoria', to: '/audit-logs', icon: ClipboardDocumentListIcon },
-  { name: 'Configurações', to: '/settings', icon: AdjustmentsHorizontalIcon }
+  { name: 'Dashboard', to: '/dashboard', icon: HomeIcon, roles: ['admin', 'editor', 'viewer'] },
+  { name: 'Certificados', to: '/certificates', icon: DocumentDuplicateIcon, roles: ['admin', 'editor', 'viewer'] },
+  { name: 'Modelos de alerta', to: '/alert-models', icon: BellAlertIcon, roles: ['admin', 'editor', 'viewer'] },
+  { name: 'Canais', to: '/channels', icon: AdjustmentsHorizontalIcon, roles: ['admin', 'editor', 'viewer'] },
+  { name: 'Usuários', to: '/users', icon: UserGroupIcon, roles: ['admin'] },
+  { name: 'Logs de auditoria', to: '/audit-logs', icon: ClipboardDocumentListIcon, roles: ['admin', 'editor', 'viewer'] },
+  { name: 'Configurações', to: '/settings', icon: AdjustmentsHorizontalIcon, roles: ['admin', 'editor'] }
 ];
 
 const Sidebar: React.FC = () => {
+  const { user } = useAuth();
+  const allowedNavigation = navigation.filter((item) => (user ? item.roles.includes(user.role) : false));
   return (
     <nav className="flex flex-1 flex-col px-4 py-6">
       <div className="mb-8 flex items-center space-x-2">
@@ -25,7 +30,7 @@ const Sidebar: React.FC = () => {
         <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">Cert Manager</span>
       </div>
       <div className="flex-1 space-y-1">
-        {navigation.map((item) => (
+        {allowedNavigation.map((item) => (
           <NavLink
             key={item.name}
             to={item.to}

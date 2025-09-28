@@ -16,7 +16,7 @@ const LoginPage: React.FC = () => {
       password: ''
     }
   });
-  const { login } = useAuth();
+  const { login, requiresPasswordReset } = useAuth();
   const { notify } = useToast();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
@@ -25,7 +25,14 @@ const LoginPage: React.FC = () => {
     setSubmitting(true);
     try {
       await login(values.email, values.password);
-      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sess?o iniciada com sucesso.' });
+      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sessão iniciada com sucesso.' });
+      if (requiresPasswordReset) {
+        notify({
+          type: 'warning',
+          title: 'Senha temporária',
+          description: 'Defina uma nova senha segura para continuar.'
+        });
+      }
       navigate('/dashboard');
     } catch (error) {
       notify({ type: 'error', title: 'Falha no login', description: 'Verifique suas credenciais.' });

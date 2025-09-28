@@ -1,52 +1,54 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, attachAuthInterceptor, setAccessToken as applyAccessToken } from '../services/apiClient';
 
-type User = {
+export type AuthUser = {
   id: string;
   email: string;
+  name: string;
+  role: 'admin' | 'editor' | 'viewer';
+  status: 'active' | 'disabled';
+  lastLoginAt?: string;
+  mfaEnabled: boolean;
 };
 
 type AuthResponse = {
+  user: AuthUser;
   accessToken: string;
-  expiresIn: number;
+  accessTokenExpiresAt: string;
+  refreshTokenExpiresAt: string;
+  requiresPasswordReset: boolean;
 };
 
 type AuthContextValue = {
-  user: User | null;
+  user: AuthUser | null;
   accessToken: string | null;
+  requiresPasswordReset: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshSession: () => Promise<string | null>;
 };
 
-const decodeToken = (token: string): User | null => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return { id: payload.sub || payload.email, email: payload.email };
-  } catch (error) {
-    console.error('Erro ao decodificar token', error);
-    return null;
-  }
-};
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [requiresPasswordReset, setRequiresPasswordReset] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const applySession = useCallback((payload: AuthResponse) => {
     setAccessToken(payload.accessToken);
     applyAccessToken(payload.accessToken);
-    setUser(decodeToken(payload.accessToken));
+    setUser(payload.user);
+    setRequiresPasswordReset(payload.requiresPasswordReset);
   }, []);
 
   const clearSession = useCallback(() => {
     setAccessToken(null);
     setUser(null);
     applyAccessToken(null);
+    setRequiresPasswordReset(false);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -87,11 +89,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = useMemo<AuthContextValue>(() => ({
     user,
     accessToken,
+    requiresPasswordReset,
     loading,
     login,
     logout,
     refreshSession
-  }), [user, accessToken, loading, login, logout, refreshSession]);
+  }), [user, accessToken, requiresPasswordReset, loading, login, logout, refreshSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

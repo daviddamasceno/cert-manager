@@ -1,5 +1,6 @@
 import logger from '../utils/logger';
 import { alertModelService } from '../services/container';
+import { SYSTEM_ACTOR } from '../services/types';
 
 const DEFAULT_ALERT_MODEL_NAME = '30 dias antes';
 
@@ -18,7 +19,7 @@ export const ensureDefaultAlertModel = async (): Promise<void> => {
       'Ol?,\n\nO certificado {{name}} ir? expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renova??o.\n\nEquipe Cert Manager.',
     offsetDaysAfter: undefined,
     repeatEveryDays: 7
-  });
+  }, SYSTEM_ACTOR);
 
   logger.info('Default alert model created');
 };

@@ -3,6 +3,8 @@ import { channelService } from '../services/container';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { ChannelType } from '../domain/types';
 import { channelTestRateLimiter } from '../middlewares/rateLimiter';
+import { authorizeRoles } from '../middlewares/authorizeRoles';
+import { ServiceActor, SYSTEM_ACTOR } from '../services/types';
 
 const isValidType = (value: unknown): value is ChannelType =>
   typeof value === 'string' &&
@@ -42,14 +44,27 @@ const parseBody = (body: any, { requireName, requireType }: { requireName: boole
 
 export const channelController = Router();
 
+const resolveActor = (req: AuthenticatedRequest): ServiceActor => {
+  const user = req.user;
+  if (!user) {
+    return SYSTEM_ACTOR;
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name
+  };
+};
+
 channelController.get('/', async (_req, res) => {
   const channels = await channelService.list();
   res.json(channels);
 });
 
-channelController.post('/', async (req: AuthenticatedRequest, res) => {
+channelController.post('/', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveActor(req);
     const created = await channelService.create(
       parseBody(req.body, { requireName: true, requireType: true }),
       actor
@@ -60,9 +75,9 @@ channelController.post('/', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-channelController.put('/:id', async (req: AuthenticatedRequest, res) => {
+channelController.put('/:id', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveActor(req);
     const updated = await channelService.update(
       req.params.id,
       parseBody(req.body, { requireName: false, requireType: false }),
@@ -76,9 +91,10 @@ channelController.put('/:id', async (req: AuthenticatedRequest, res) => {
 
 channelController.post(
   '/:id/test',
+  authorizeRoles('admin', 'editor'),
   channelTestRateLimiter,
   async (req: AuthenticatedRequest, res) => {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveActor(req);
     try {
       const payload = req.body && typeof req.body === 'object' ? req.body : {};
       const result = await channelService.testChannel(req.params.id, payload, actor);
@@ -89,8 +105,8 @@ channelController.post(
   }
 );
 
-channelController.delete('/:id', async (req: AuthenticatedRequest, res) => {
-  const actor = req.user ?? { id: 'system', email: 'system@local' };
+channelController.delete('/:id', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
+  const actor = resolveActor(req);
   await channelService.softDelete(req.params.id, actor);
   res.status(204).send();
 });

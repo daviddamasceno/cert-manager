@@ -5,6 +5,21 @@ import type { CertificateInput } from '../services/certificateService';
 import { parseDate, now } from '../utils/time';
 import { sanitizeString } from '../utils/validators';
 import { channelTestRateLimiter } from '../middlewares/rateLimiter';
+import { authorizeRoles } from '../middlewares/authorizeRoles';
+import { ServiceActor, SYSTEM_ACTOR } from '../services/types';
+
+const resolveActor = (req: AuthenticatedRequest): ServiceActor => {
+  const user = req.user;
+  if (!user) {
+    return SYSTEM_ACTOR;
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name
+  };
+};
 
 const extractChannelIds = (source: Record<string, unknown>): string[] => {
   if (Array.isArray(source.channelIds)) {
@@ -124,9 +139,9 @@ certificateController.get('/', async (req, res) => {
   res.json(filtered);
 });
 
-certificateController.post('/', async (req: AuthenticatedRequest, res) => {
+certificateController.post('/', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveActor(req);
     const payload = parseCertificateCreatePayload(req.body);
     const created = await certificateService.create(payload, actor);
     res.status(201).json(created);
@@ -135,9 +150,9 @@ certificateController.post('/', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-certificateController.put('/:id', async (req: AuthenticatedRequest, res) => {
+certificateController.put('/:id', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveActor(req);
     const payload = parseCertificateUpdatePayload(req.body);
     const updated = await certificateService.update(req.params.id, payload, actor);
     res.json(updated);
@@ -146,8 +161,8 @@ certificateController.put('/:id', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-certificateController.delete('/:id', async (req: AuthenticatedRequest, res) => {
-  const actor = req.user ?? { id: 'system', email: 'system@local' };
+certificateController.delete('/:id', authorizeRoles('admin', 'editor'), async (req: AuthenticatedRequest, res) => {
+  const actor = resolveActor(req);
   await certificateService.delete(req.params.id, actor);
   res.status(204).send();
 });
@@ -157,15 +172,23 @@ certificateController.get('/:id/channels', async (req, res) => {
   res.json(links);
 });
 
-certificateController.post('/:id/channels', async (req: AuthenticatedRequest, res) => {
-  const actor = req.user ?? { id: 'system', email: 'system@local' };
+certificateController.post(
+  '/:id/channels',
+  authorizeRoles('admin', 'editor'),
+  async (req: AuthenticatedRequest, res) => {
+  const actor = resolveActor(req);
   const source = (req.body ?? {}) as Record<string, unknown>;
   const channelIds = extractChannelIds(source);
   await certificateService.setChannelLinks(req.params.id, channelIds, actor);
   res.json({ channelIds });
-});
+  }
+);
 
-certificateController.post('/:id/test-notification', channelTestRateLimiter, async (req, res) => {
+certificateController.post(
+  '/:id/test-notification',
+  authorizeRoles('admin', 'editor'),
+  channelTestRateLimiter,
+  async (req, res) => {
   const certificate = await certificateService.get(req.params.id);
   if (!certificate) {
     res.status(404).json({ message: 'Certificado não encontrado' });
@@ -194,4 +217,5 @@ certificateController.post('/:id/test-notification', channelTestRateLimiter, asy
     const message = error instanceof Error ? error.message : 'Falha ao enviar notificações';
     res.status(500).json({ message });
   }
-});
+  }
+);

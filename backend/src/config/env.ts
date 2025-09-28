@@ -3,15 +3,32 @@ import { assertValidHttpUrl } from '../utils/validators';
 
 dotenv.config();
 
+export type SupportedPasswordHasher = 'argon2id' | 'bcrypt';
+
 export interface AppConfig {
   port: number;
   env: string;
   appBaseUrl: string;
-  jwtSecret: string;
-  jwtExpiresIn: string;
-  jwtRefreshExpiresIn: string;
-  adminEmail: string;
-  adminPasswordHash: string;
+  jwt: {
+    secret: string;
+    algorithm: 'HS256';
+    accessTtlMinutes: number;
+    refreshTtlDays: number;
+  };
+  password: {
+    hasher: SupportedPasswordHasher;
+    minLength: number;
+    bcryptCost: number;
+    argon2: {
+      timeCost: number;
+      memoryCost: number;
+      parallelism: number;
+    };
+  };
+  auth: {
+    loginMaxAttempts: number;
+    loginLockMinutes: number;
+  };
   googleServiceAccountJson: string;
   googleSheetsId: string;
   cacheTtlSeconds: number;
@@ -63,15 +80,38 @@ const normalizeAppBaseUrl = (value: string): string => {
   return parsed.origin;
 };
 
+const normalizePasswordHasher = (value: string | undefined): SupportedPasswordHasher => {
+  const normalized = (value || 'argon2id').toLowerCase();
+  if (normalized !== 'argon2id' && normalized !== 'bcrypt') {
+    throw new Error(`Unsupported PASSWORD_HASHER value: ${value}`);
+  }
+  return normalized as SupportedPasswordHasher;
+};
+
 const config: AppConfig = {
   port: numeric(process.env.PORT, 8080),
   env: process.env.NODE_ENV || 'development',
   appBaseUrl: normalizeAppBaseUrl(required(process.env.APP_BASE_URL, 'APP_BASE_URL')),
-  jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
-  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-  adminEmail: required(process.env.ADMIN_EMAIL, 'ADMIN_EMAIL'),
-  adminPasswordHash: required(process.env.ADMIN_PASSWORD_HASH, 'ADMIN_PASSWORD_HASH'),
+  jwt: {
+    secret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
+    algorithm: 'HS256',
+    accessTtlMinutes: numeric(process.env.JWT_ACCESS_TTL_MIN, 15),
+    refreshTtlDays: numeric(process.env.JWT_REFRESH_TTL_DAYS, 14)
+  },
+  password: {
+    hasher: normalizePasswordHasher(process.env.PASSWORD_HASHER),
+    minLength: numeric(process.env.PASSWORD_MIN_LENGTH, 10),
+    bcryptCost: numeric(process.env.BCRYPT_COST, 12),
+    argon2: {
+      timeCost: numeric(process.env.ARGON2_TIME, 3),
+      memoryCost: numeric(process.env.ARGON2_MEMORY, 65536),
+      parallelism: numeric(process.env.ARGON2_THREADS, 2)
+    }
+  },
+  auth: {
+    loginMaxAttempts: numeric(process.env.LOGIN_MAX_ATTEMPTS, 5),
+    loginLockMinutes: numeric(process.env.LOGIN_LOCK_MINUTES, 15)
+  },
   googleServiceAccountJson: decodeBase64(
     required(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64, 'GOOGLE_SERVICE_ACCOUNT_JSON_BASE64')
   ),

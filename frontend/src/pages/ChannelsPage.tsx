@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useForm } from 'react-hook-form';
 import dayjs from 'dayjs';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { ChannelSummary, ChannelType } from '../types';
 import { createChannel, disableChannel, listChannels, testChannel, updateChannel } from '../services/channels';
 
@@ -80,6 +81,8 @@ const defaultValues: FormValues = {
 };
 
 const ChannelsPage: React.FC = () => {
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
   const [channels, setChannels] = useState<ChannelSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -119,6 +122,9 @@ const ChannelsPage: React.FC = () => {
   }, []);
 
   const openCreateModal = () => {
+    if (!canManage) {
+      return;
+    }
     setExistingSecrets({});
     reset({ ...defaultValues });
     setSelectedChannel(null);
@@ -128,6 +134,9 @@ const ChannelsPage: React.FC = () => {
   };
 
   const openEditModal = (summary: ChannelSummary) => {
+    if (!canManage) {
+      return;
+    }
     setSelectedChannel(summary);
     setExistingSecrets(
       Object.fromEntries(summary.secrets.map((secret) => [secret.key, secret.hasValue]))
@@ -172,6 +181,9 @@ const ChannelsPage: React.FC = () => {
   });
 
   const handleDisable = async (channel: ChannelSummary) => {
+    if (!canManage) {
+      return;
+    }
     const confirmMsg = channel.channel.enabled
       ? 'Deseja desativar este canal?'
       : 'Deseja reativar este canal?';
@@ -207,6 +219,9 @@ const ChannelsPage: React.FC = () => {
   };
 
   const handleTestChannel = async () => {
+    if (!canManage) {
+      return;
+    }
     if (!selectedChannel) {
       return;
     }
@@ -266,13 +281,15 @@ const ChannelsPage: React.FC = () => {
             Gerencie instâncias de canais e segredos criptografados.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" /> Novo canal
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" /> Novo canal
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -324,24 +341,28 @@ const ChannelsPage: React.FC = () => {
                     {dayjs(summary.channel.updatedAt).format('DD/MM/YYYY HH:mm')}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(summary)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PencilSquareIcon className="mr-1 h-4 w-4" />
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDisable(summary)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PowerIcon className="mr-1 h-4 w-4" />
-                        {summary.channel.enabled ? 'Desativar' : 'Ativar'}
-                      </button>
-                    </div>
+                    {canManage ? (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(summary)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PencilSquareIcon className="mr-1 h-4 w-4" />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDisable(summary)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PowerIcon className="mr-1 h-4 w-4" />
+                          {summary.channel.enabled ? 'Desativar' : 'Ativar'}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500">Visualização</span>
+                    )}
                   </td>
                 </tr>
               ))
@@ -508,10 +529,12 @@ const ChannelsPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={handleTestChannel}
-                                disabled={testing}
+                                disabled={!canManage || testing}
                                 className={clsx(
                                   'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
-                                  testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                                  !canManage || testing
+                                    ? 'bg-primary-400 cursor-not-allowed'
+                                    : 'bg-primary-600 hover:bg-primary-700'
                                 )}
                               >
                                 {testing ? 'Testando...' : 'Enviar teste'}
@@ -528,10 +551,12 @@ const ChannelsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={handleTestChannel}
-                              disabled={testing}
+                              disabled={!canManage || testing}
                               className={clsx(
                                 'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
-                                testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                                !canManage || testing
+                                  ? 'bg-primary-400 cursor-not-allowed'
+                                  : 'bg-primary-600 hover:bg-primary-700'
                               )}
                             >
                               {testing ? 'Testando...' : 'Enviar teste'}
@@ -589,7 +614,13 @@ const ChannelsPage: React.FC = () => {
                       </button>
                       <button
                         type="submit"
-                        className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+                        disabled={!canManage}
+                        className={clsx(
+                          'rounded-md px-4 py-2 text-sm font-semibold text-white',
+                          canManage
+                            ? 'bg-primary-600 hover:bg-primary-700'
+                            : 'bg-primary-400 cursor-not-allowed'
+                        )}
                       >
                         Salvar
                       </button>

@@ -16,6 +16,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import clsx from 'clsx';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 dayjs.extend(relativeTime);
 
@@ -55,6 +56,8 @@ const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
 };
 
 const CertificatesPage: React.FC = () => {
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [alertModels, setAlertModels] = useState<AlertModel[]>([]);
   const [channelSummaries, setChannelSummaries] = useState<ChannelSummary[]>([]);
@@ -215,14 +218,16 @@ const CertificatesPage: React.FC = () => {
             Cadastre certificados, defina canais e vincule modelos de alerta.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openModalForCreate}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-          Novo certificado
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openModalForCreate}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Novo certificado
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -281,29 +286,33 @@ const CertificatesPage: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => openModalForEdit(certificate)}
-                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleTestNotification(certificate)}
-                          className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
-                        >
-                          <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(certificate)}
-                          className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                        >
-                          <TrashIcon className="mr-1 h-4 w-4" /> Remover
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => openModalForEdit(certificate)}
+                            className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTestNotification(certificate)}
+                            className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
+                          >
+                            <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(certificate)}
+                            className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                          >
+                            <TrashIcon className="mr-1 h-4 w-4" /> Remover
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">Visualização</span>
+                      )}
                     </td>
                   </tr>
                 );

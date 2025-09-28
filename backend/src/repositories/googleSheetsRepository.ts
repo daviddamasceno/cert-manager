@@ -11,7 +11,9 @@ import {
   ChannelSecret,
   CertificateChannelLink,
   ChannelType,
-  User
+  RefreshTokenRecord,
+  User,
+  UserCredentials
 } from '../domain/types';
 import {
   AlertModelRepository,
@@ -31,6 +33,8 @@ const SHEET_CHANNEL_SECRETS = 'channel_secrets';
 const SHEET_CERTIFICATE_CHANNELS = 'certificate_channels';
 const SHEET_AUDIT_LOGS = 'audit_logs';
 const SHEET_USERS = 'users';
+const SHEET_USER_CREDENTIALS = 'user_credentials';
+const SHEET_REFRESH_TOKENS = 'refresh_tokens';
 const SHEET_SMTP_HISTORY = 'smtp_sends_history';
 
 const HEADERS: Record<string, string[]> = {
@@ -70,7 +74,33 @@ const HEADERS: Record<string, string[]> = {
     'user_agent',
     'note'
   ],
-  [SHEET_USERS]: ['id', 'email', 'name', 'role', 'created_at'],
+  [SHEET_USERS]: [
+    'id',
+    'email',
+    'name',
+    'role',
+    'status',
+    'created_at',
+    'updated_at',
+    'last_login_at',
+    'mfa_enabled'
+  ],
+  [SHEET_USER_CREDENTIALS]: [
+    'user_id',
+    'password_hash',
+    'password_updated_at',
+    'password_needs_reset'
+  ],
+  [SHEET_REFRESH_TOKENS]: [
+    'id',
+    'user_id',
+    'token_hash',
+    'issued_at',
+    'expires_at',
+    'user_agent',
+    'ip',
+    'revoked'
+  ],
   [SHEET_SMTP_HISTORY]: ['id', 'channel_id', 'to', 'subject', 'status', 'error', 'timestamp']
 };
 
@@ -574,27 +604,222 @@ export class GoogleSheetsRepository
 
   /* Users */
 
-  async getUserByEmail(email: string): Promise<User | null> {
-    const users = await this.listUsers();
-    return users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+  private mapUserRow(map: SheetRowMap): User {
+    return {
+      id: map['id'],
+      email: map['email'],
+      name: map['name'],
+      role: (map['role'] as User['role']) || 'viewer',
+      status: (map['status'] as User['status']) || 'active',
+      createdAt: map['created_at'],
+      updatedAt: map['updated_at'] || map['created_at'],
+      lastLoginAt: map['last_login_at'] || undefined,
+      mfaEnabled: map['mfa_enabled'] === 'true'
+    };
   }
 
-  async createUser(user: User): Promise<void> {
-    await this.append(SHEET_USERS, [user.id, user.email, user.name, user.role, user.createdAt]);
+  async getUserByEmail(email: string): Promise<User | null> {
+    const normalized = email.toLowerCase();
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    const match = rows.find((row) => {
+      const map = this.mapRow(header, row);
+      return map['email'].toLowerCase() === normalized;
+    });
+    return match ? this.mapUserRow(this.mapRow(header, match)) : null;
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    const match = rows.find((row) => row[0] === id);
+    return match ? this.mapUserRow(this.mapRow(header, match)) : null;
+  }
+
+  async createUser(user: User, credentials: UserCredentials): Promise<void> {
+    await this.append(SHEET_USERS, [
+      user.id,
+      user.email,
+      user.name,
+      user.role,
+      user.status,
+      user.createdAt,
+      user.updatedAt,
+      user.lastLoginAt || '',
+      user.mfaEnabled ? 'true' : 'false'
+    ]);
+    await this.saveUserCredentials(credentials);
+  }
+
+  async updateUser(user: User): Promise<void> {
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    const updatedRows = rows.map((row) => {
+      if (row[0] !== user.id) {
+        return row;
+      }
+      return [
+        user.id,
+        user.email,
+        user.name,
+        user.role,
+        user.status,
+        user.createdAt,
+        user.updatedAt,
+        user.lastLoginAt || '',
+        user.mfaEnabled ? 'true' : 'false'
+      ];
+    });
+    await this.write(SHEET_USERS, [header, ...updatedRows]);
   }
 
   async listUsers(): Promise<User[]> {
     const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
-    return rows.map((row) => {
-      const map = this.mapRow(header, row);
-      return {
-        id: map['id'],
-        email: map['email'],
-        name: map['name'],
-        role: (map['role'] as User['role']) || 'admin',
-        createdAt: map['created_at']
-      };
+    return rows.map((row) => this.mapUserRow(this.mapRow(header, row)));
+  }
+
+  async saveUserCredentials(credentials: UserCredentials): Promise<void> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_USER_CREDENTIALS,
+      HEADERS[SHEET_USER_CREDENTIALS]
+    );
+
+    const newRows = rows.filter((row) => row[0] !== credentials.userId);
+    newRows.push([
+      credentials.userId,
+      credentials.passwordHash,
+      credentials.passwordUpdatedAt,
+      credentials.passwordNeedsReset ? 'true' : 'false'
+    ]);
+
+    await this.write(SHEET_USER_CREDENTIALS, [header, ...newRows]);
+  }
+
+  async getUserCredentials(userId: string): Promise<UserCredentials | null> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_USER_CREDENTIALS,
+      HEADERS[SHEET_USER_CREDENTIALS]
+    );
+    const match = rows.find((row) => row[0] === userId);
+    if (!match) {
+      return null;
+    }
+    const map = this.mapRow(header, match);
+    return {
+      userId: map['user_id'],
+      passwordHash: map['password_hash'],
+      passwordUpdatedAt: map['password_updated_at'],
+      passwordNeedsReset: map['password_needs_reset'] === 'true'
+    };
+  }
+
+  async listRefreshTokens(userId: string): Promise<RefreshTokenRecord[]> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+    return rows
+      .filter((row) => row[1] === userId)
+      .map((row) => {
+        const map = this.mapRow(header, row);
+        return {
+          id: map['id'],
+          userId: map['user_id'],
+          tokenHash: map['token_hash'],
+          issuedAt: map['issued_at'],
+          expiresAt: map['expires_at'],
+          userAgent: map['user_agent'] || undefined,
+          ip: map['ip'] || undefined,
+          revoked: map['revoked'] === 'true'
+        };
+      });
+  }
+
+  async storeRefreshToken(record: RefreshTokenRecord): Promise<void> {
+    await this.append(SHEET_REFRESH_TOKENS, [
+      record.id,
+      record.userId,
+      record.tokenHash,
+      record.issuedAt,
+      record.expiresAt,
+      record.userAgent || '',
+      record.ip || '',
+      record.revoked ? 'true' : 'false'
+    ]);
+  }
+
+  async revokeRefreshToken(id: string): Promise<void> {
+    await this.updateRefreshToken(id, (record) => ({ ...record, revoked: true }));
+  }
+
+  async revokeTokensByUser(userId: string): Promise<void> {
+    const tokens = await this.listRefreshTokens(userId);
+    for (const token of tokens) {
+      await this.revokeRefreshToken(token.id);
+    }
+  }
+
+  async findRefreshToken(id: string): Promise<RefreshTokenRecord | null> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+    const match = rows.find((row) => row[0] === id);
+    if (!match) {
+      return null;
+    }
+    const map = this.mapRow(header, match);
+    return {
+      id: map['id'],
+      userId: map['user_id'],
+      tokenHash: map['token_hash'],
+      issuedAt: map['issued_at'],
+      expiresAt: map['expires_at'],
+      userAgent: map['user_agent'] || undefined,
+      ip: map['ip'] || undefined,
+      revoked: map['revoked'] === 'true'
+    };
+  }
+
+  private async updateRefreshToken(
+    id: string,
+    updater: (record: RefreshTokenRecord) => RefreshTokenRecord
+  ): Promise<void> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+
+    let found = false;
+    const updatedRows = rows.map((row) => {
+      if (row[0] !== id) {
+        return row;
+      }
+      found = true;
+      const record = updater({
+        id: row[0],
+        userId: row[1],
+        tokenHash: row[2],
+        issuedAt: row[3],
+        expiresAt: row[4],
+        userAgent: row[5] || undefined,
+        ip: row[6] || undefined,
+        revoked: row[7] === 'true'
+      });
+      return [
+        record.id,
+        record.userId,
+        record.tokenHash,
+        record.issuedAt,
+        record.expiresAt,
+        record.userAgent || '',
+        record.ip || '',
+        record.revoked ? 'true' : 'false'
+      ];
     });
+
+    if (!found) {
+      return;
+    }
+
+    await this.write(SHEET_REFRESH_TOKENS, [header, ...updatedRows]);
   }
 
   /* Audit */

@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertModel,
   AuditLog,
   Certificate,
@@ -6,7 +6,9 @@
   ChannelParam,
   ChannelSecret,
   CertificateChannelLink,
-  User
+  RefreshTokenRecord,
+  User,
+  UserCredentials
 } from '../domain/types';
 
 export interface CertificateRepository {
@@ -53,6 +55,15 @@ export interface AuditLogRepository {
 
 export interface UserRepository {
   getUserByEmail(email: string): Promise<User | null>;
-  createUser(user: User): Promise<void>;
+  getUserById(id: string): Promise<User | null>;
+  createUser(user: User, credentials: UserCredentials): Promise<void>;
+  updateUser(user: User): Promise<void>;
   listUsers(): Promise<User[]>;
+  saveUserCredentials(credentials: UserCredentials): Promise<void>;
+  getUserCredentials(userId: string): Promise<UserCredentials | null>;
+  listRefreshTokens(userId: string): Promise<RefreshTokenRecord[]>;
+  storeRefreshToken(record: RefreshTokenRecord): Promise<void>;
+  revokeRefreshToken(id: string): Promise<void>;
+  revokeTokensByUser(userId: string): Promise<void>;
+  findRefreshToken(id: string): Promise<RefreshTokenRecord | null>;
 }

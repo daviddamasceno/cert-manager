@@ -13,7 +13,15 @@ export type AuditAction =
   | 'test_send'
   | 'link'
   | 'unlink'
-  | 'notification_sent';
+  | 'notification_sent'
+  | 'user_create'
+  | 'user_update'
+  | 'user_disable'
+  | 'user_reset_password'
+  | 'login_success'
+  | 'login_failed'
+  | 'logout'
+  | 'token_refresh';
 
 export interface Certificate {
   id: string;
@@ -80,12 +88,38 @@ export interface AuditLog {
   note?: string;
 }
 
+export type UserRole = 'admin' | 'editor' | 'viewer';
+
+export type UserStatus = 'active' | 'disabled';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'viewer';
+  role: UserRole;
+  status: UserStatus;
   createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+  mfaEnabled: boolean;
+}
+
+export interface UserCredentials {
+  userId: string;
+  passwordHash: string;
+  passwordUpdatedAt: string;
+  passwordNeedsReset: boolean;
+}
+
+export interface RefreshTokenRecord {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  issuedAt: string;
+  expiresAt: string;
+  userAgent?: string;
+  ip?: string;
+  revoked: boolean;
 }
 
 export interface NotificationContext {

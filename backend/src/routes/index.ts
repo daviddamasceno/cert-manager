@@ -7,6 +7,7 @@ import { settingsController } from '../controllers/settingsController';
 import { authMiddleware } from '../middlewares/authMiddleware';
 import { auditController } from '../controllers/auditController';
 import { channelController } from '../controllers/channelController';
+import { userController } from '../controllers/userController';
 
 export const router = Router();
 
@@ -16,4 +17,5 @@ router.use('/alert-models', authMiddleware, alertModelController);
 router.use('/channels', authMiddleware, channelController);
 router.use('/settings', authMiddleware, settingsController);
 router.use('/audit-logs', authMiddleware, auditController);
+router.use('/users', authMiddleware, userController);
 router.use('/', systemController);

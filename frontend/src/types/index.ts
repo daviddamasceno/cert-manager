@@ -52,6 +52,35 @@ export interface AuditLog {
   note?: string;
 }
 
+export type UserRole = 'admin' | 'editor' | 'viewer';
+export type UserStatus = 'active' | 'disabled';
+
+export interface ManagedUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+  mfaEnabled: boolean;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+}
+
+export interface UpdateUserRequest {
+  name?: string;
+  role?: UserRole;
+  status?: UserStatus;
+  resetPassword?: boolean;
+}
+
 export interface SettingsResponse {
   timezone: string;
   scheduler: {
