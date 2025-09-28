@@ -86,7 +86,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'viewer';
+  role: 'admin' | 'editor' | 'viewer';
   status: UserStatus;
   createdAt: string;
   updatedAt: string;
