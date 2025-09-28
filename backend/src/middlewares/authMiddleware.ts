@@ -1,17 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/authService';
+import { authService } from '../services/container';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
+    role?: 'admin' | 'viewer';
   };
 }
 
 export const authMiddleware = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    res.status(401).json({ message: 'N?o autenticado' });
+    res.status(401).json({ message: 'Não autenticado' });
     return;
   }
 
@@ -22,10 +23,10 @@ export const authMiddleware = (req: AuthenticatedRequest, res: Response, next: N
   }
 
   try {
-    const payload = authService.verifyToken(token, 'access');
-    req.user = { id: payload.sub || payload.email, email: payload.email };
+    const payload = authService.verifyAccessToken(token);
+    req.user = { id: payload.sub, email: payload.email, role: payload.role };
     next();
   } catch (error) {
-    res.status(401).json({ message: 'Token inv?lido' });
+    res.status(401).json({ message: 'Token inválido' });
   }
 };

@@ -69,7 +69,7 @@ const config: AppConfig = {
   appBaseUrl: normalizeAppBaseUrl(required(process.env.APP_BASE_URL, 'APP_BASE_URL')),
   jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
-  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '14d',
   adminEmail: required(process.env.ADMIN_EMAIL, 'ADMIN_EMAIL'),
   adminPasswordHash: required(process.env.ADMIN_PASSWORD_HASH, 'ADMIN_PASSWORD_HASH'),
   googleServiceAccountJson: decodeBase64(
