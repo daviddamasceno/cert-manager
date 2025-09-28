@@ -5,6 +5,7 @@ import type { CertificateInput } from '../services/certificateService';
 import { parseDate, now } from '../utils/time';
 import { sanitizeString } from '../utils/validators';
 import { channelTestRateLimiter } from '../middlewares/rateLimiter';
+import { requireRole } from '../middlewares/roleMiddleware';
 
 const extractChannelIds = (source: Record<string, unknown>): string[] => {
   if (Array.isArray(source.channelIds)) {
@@ -124,7 +125,7 @@ certificateController.get('/', async (req, res) => {
   res.json(filtered);
 });
 
-certificateController.post('/', async (req: AuthenticatedRequest, res) => {
+certificateController.post('/', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   try {
     const actor = req.user ?? { id: 'system', email: 'system@local' };
     const payload = parseCertificateCreatePayload(req.body);
@@ -135,7 +136,7 @@ certificateController.post('/', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-certificateController.put('/:id', async (req: AuthenticatedRequest, res) => {
+certificateController.put('/:id', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   try {
     const actor = req.user ?? { id: 'system', email: 'system@local' };
     const payload = parseCertificateUpdatePayload(req.body);
@@ -146,7 +147,7 @@ certificateController.put('/:id', async (req: AuthenticatedRequest, res) => {
   }
 });
 
-certificateController.delete('/:id', async (req: AuthenticatedRequest, res) => {
+certificateController.delete('/:id', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   const actor = req.user ?? { id: 'system', email: 'system@local' };
   await certificateService.delete(req.params.id, actor);
   res.status(204).send();
@@ -157,7 +158,7 @@ certificateController.get('/:id/channels', async (req, res) => {
   res.json(links);
 });
 
-certificateController.post('/:id/channels', async (req: AuthenticatedRequest, res) => {
+certificateController.post('/:id/channels', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   const actor = req.user ?? { id: 'system', email: 'system@local' };
   const source = (req.body ?? {}) as Record<string, unknown>;
   const channelIds = extractChannelIds(source);
@@ -165,33 +166,38 @@ certificateController.post('/:id/channels', async (req: AuthenticatedRequest, re
   res.json({ channelIds });
 });
 
-certificateController.post('/:id/test-notification', channelTestRateLimiter, async (req, res) => {
-  const certificate = await certificateService.get(req.params.id);
-  if (!certificate) {
-    res.status(404).json({ message: 'Certificado não encontrado' });
-    return;
+certificateController.post(
+  '/:id/test-notification',
+  requireRole(['editor']),
+  channelTestRateLimiter,
+  async (req, res) => {
+    const certificate = await certificateService.get(req.params.id);
+    if (!certificate) {
+      res.status(404).json({ message: 'Certificado não encontrado' });
+      return;
+    }
+
+    if (!certificate.alertModelId) {
+      res.status(400).json({ message: 'Certificado sem modelo de alerta vinculado' });
+      return;
+    }
+
+    const alertModel = await alertModelService.get(certificate.alertModelId);
+    if (!alertModel) {
+      res.status(400).json({ message: 'Modelo de alerta não encontrado' });
+      return;
+    }
+
+    const daysLeft = Math.floor(parseDate(certificate.expiresAt).diff(now(), 'days').days);
+
+    const actor = (req as AuthenticatedRequest).user ?? { id: 'system', email: 'system@local' };
+
+    try {
+      await notificationService.sendAlerts(certificate, alertModel, daysLeft, actor);
+      res.json({ message: 'Notificação de teste enviada' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao enviar notificações';
+      res.status(500).json({ message });
+    }
   }
-
-  if (!certificate.alertModelId) {
-    res.status(400).json({ message: 'Certificado sem modelo de alerta vinculado' });
-    return;
-  }
-
-  const alertModel = await alertModelService.get(certificate.alertModelId);
-  if (!alertModel) {
-    res.status(400).json({ message: 'Modelo de alerta não encontrado' });
-    return;
-  }
-
-  const daysLeft = Math.floor(parseDate(certificate.expiresAt).diff(now(), 'days').days);
-
-  const actor = (req as AuthenticatedRequest).user ?? { id: 'system', email: 'system@local' };
-
-  try {
-    await notificationService.sendAlerts(certificate, alertModel, daysLeft, actor);
-    res.json({ message: 'Notificação de teste enviada' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao enviar notificações';
-    res.status(500).json({ message });
-  }
-});
+);

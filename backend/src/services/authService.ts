@@ -25,7 +25,7 @@ export interface AuthContext {
 export interface AccessTokenPayload extends JwtPayload {
   sub: string;
   email: string;
-  role: 'admin' | 'viewer';
+  role: 'admin' | 'editor' | 'viewer';
   type: 'access';
 }
 
