@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, attachAuthInterceptor, setAccessToken as applyAccessToken } from '../services/apiClient';
+import { UserRole } from '../types';
 
-type User = {
+type AuthUser = {
   id: string;
   email: string;
+  role: UserRole;
+  name?: string;
 };
 
 type AuthResponse = {
@@ -12,7 +15,7 @@ type AuthResponse = {
 };
 
 type AuthContextValue = {
-  user: User | null;
+  user: AuthUser | null;
   accessToken: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -20,10 +23,15 @@ type AuthContextValue = {
   refreshSession: () => Promise<string | null>;
 };
 
-const decodeToken = (token: string): User | null => {
+const parseRole = (value: unknown): UserRole => {
+  return value === 'admin' || value === 'editor' || value === 'viewer' ? value : 'viewer';
+};
+
+const decodeToken = (token: string): AuthUser | null => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return { id: payload.sub || payload.email, email: payload.email };
+    const role = parseRole(payload.role);
+    return { id: payload.sub || payload.email, email: payload.email, role, name: payload.name };
   } catch (error) {
     console.error('Erro ao decodificar token', error);
     return null;
@@ -34,7 +42,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const applySession = useCallback((payload: AuthResponse) => {

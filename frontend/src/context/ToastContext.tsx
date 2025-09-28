@@ -1,4 +1,4 @@
-﻿import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Transition } from '@headlessui/react';
 import { CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
@@ -9,6 +9,10 @@ type Toast = {
   type: ToastType;
   title: string;
   description?: string;
+  copyable?: {
+    label?: string;
+    value: string;
+  };
 };
 
 type ToastContextValue = {
@@ -25,21 +29,82 @@ const iconByType: Record<ToastType, JSX.Element> = {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [copiedToastId, setCopiedToastId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
 
   const dismiss = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
-  const notify = useCallback(({ type, title, description }: Omit<Toast, 'id'>) => {
+  const notify = useCallback(({ type, title, description, copyable }: Omit<Toast, 'id'>) => {
     const toast: Toast = {
       id: crypto.randomUUID(),
       type,
       title,
-      description
+      description,
+      copyable
     };
     setToasts((current) => [...current, toast]);
-    setTimeout(() => dismiss(toast.id), 5000);
+    const lifetime = copyable ? 15000 : 5000;
+    setTimeout(() => dismiss(toast.id), lifetime);
   }, [dismiss]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const copyToClipboard = useCallback(async (value: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch (error) {
+        console.warn('Falha ao copiar com navigator.clipboard', error);
+      }
+    }
+
+    if (typeof document !== 'undefined') {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (successful) {
+          return true;
+        }
+      } catch (error) {
+        console.warn('Falha ao copiar utilizando textarea auxiliar', error);
+      }
+    }
+
+    return false;
+  }, []);
+
+  const handleCopy = useCallback(async (toastId: string, value: string) => {
+    const copied = await copyToClipboard(value);
+    if (copied) {
+      setCopiedToastId(toastId);
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedToastId((current) => (current === toastId ? null : current));
+        copyTimeoutRef.current = null;
+      }, 2000);
+      return;
+    }
+
+    window.prompt('Copie o valor manualmente:', value);
+  }, [copyToClipboard]);
 
   const value = useMemo(() => ({ notify }), [notify]);
 
@@ -59,7 +124,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
             >
-              <div className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-slate-800">
+              <div className="pointer-events-auto w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-slate-800">
                 <div className="p-4">
                   <div className="flex items-start">
                     <div className="flex-shrink-0">{iconByType[toast.type]}</div>
@@ -67,6 +132,25 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">{toast.title}</p>
                       {toast.description ? (
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-200">{toast.description}</p>
+                      ) : null}
+                      {toast.copyable ? (
+                        <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+                          {toast.copyable.label ? (
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              {toast.copyable.label}
+                            </p>
+                          ) : null}
+                          <div className="mt-1 flex items-center gap-3">
+                            <code className="flex-1 break-all font-mono text-sm">{toast.copyable.value}</code>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(toast.id, toast.copyable!.value)}
+                              className="inline-flex items-center rounded-md border border-slate-400 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                              {copiedToastId === toast.id ? 'Copiado!' : 'Copiar'}
+                            </button>
+                          </div>
+                        </div>
                       ) : null}
                     </div>
                     <div className="ml-4 flex flex-shrink-0">

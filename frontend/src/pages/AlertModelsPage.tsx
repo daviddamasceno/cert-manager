@@ -6,6 +6,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { PlusIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 interface AlertModelFormValues {
   name: string;
@@ -31,6 +32,8 @@ const AlertModelsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<AlertModel | null>(null);
   const { notify } = useToast();
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
   const { register, handleSubmit, reset, formState } = useForm<AlertModelFormValues>({ defaultValues });
 
   const fetchData = async () => {
@@ -43,12 +46,18 @@ const AlertModelsPage: React.FC = () => {
   }, []);
 
   const openCreate = () => {
+    if (!canManage) {
+      return;
+    }
     reset(defaultValues);
     setSelectedModel(null);
     setModalOpen(true);
   };
 
   const openEdit = (model: AlertModel) => {
+    if (!canManage) {
+      return;
+    }
     reset({
       name: model.name,
       offsetDaysBefore: model.offsetDaysBefore,
@@ -84,6 +93,9 @@ const AlertModelsPage: React.FC = () => {
   });
 
   const handleDelete = async (model: AlertModel) => {
+    if (!canManage) {
+      return;
+    }
     if (!confirm(`Deseja remover ${model.name}?`)) {
       return;
     }
@@ -105,14 +117,16 @@ const AlertModelsPage: React.FC = () => {
             Configure regras de disparo e personalize os templates dos avisos.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-          Novo modelo
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Novo modelo
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -123,13 +137,13 @@ const AlertModelsPage: React.FC = () => {
               <th className="px-4 py-3">Antes (dias)</th>
               <th className="px-4 py-3">Depois (dias)</th>
               <th className="px-4 py-3">Repetição</th>
-              <th className="px-4 py-3">Ações</th>
+              {canManage ? <th className="px-4 py-3">Ações</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {alertModels.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={canManage ? 5 : 4} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Nenhum modelo cadastrado.
                 </td>
               </tr>
@@ -140,24 +154,26 @@ const AlertModelsPage: React.FC = () => {
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.offsetDaysBefore}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.offsetDaysAfter ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.repeatEveryDays ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(model)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(model)}
-                        className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      >
-                        <TrashIcon className="mr-1 h-4 w-4" /> Remover
-                      </button>
-                    </div>
-                  </td>
+                  {canManage ? (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(model)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(model)}
+                          className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                        >
+                          <TrashIcon className="mr-1 h-4 w-4" /> Remover
+                        </button>
+                      </div>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -165,7 +181,7 @@ const AlertModelsPage: React.FC = () => {
         </table>
       </div>
 
-      <Transition appear show={modalOpen} as={Fragment}>
+      <Transition appear show={modalOpen && canManage} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setModalOpen(false)}>
           <Transition.Child
             as={Fragment}

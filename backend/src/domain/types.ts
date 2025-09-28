@@ -16,7 +16,8 @@ export type AuditAction =
   | 'notification_sent'
   | 'user_create'
   | 'user_update'
-  | 'user_disable';
+  | 'user_disable'
+  | 'user_password_reset';
 
 export interface Certificate {
   id: string;
