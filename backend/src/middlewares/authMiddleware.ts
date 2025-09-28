@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/authService';
+import { authService } from '../services/container';
+import { InvalidTokenError } from '../services/authService';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -11,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
 export const authMiddleware = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    res.status(401).json({ message: 'N?o autenticado' });
+    res.status(401).json({ message: 'Não autenticado' });
     return;
   }
 
@@ -26,6 +27,11 @@ export const authMiddleware = (req: AuthenticatedRequest, res: Response, next: N
     req.user = { id: payload.sub || payload.email, email: payload.email };
     next();
   } catch (error) {
-    res.status(401).json({ message: 'Token inv?lido' });
+    if (error instanceof InvalidTokenError) {
+      res.status(401).json({ message: 'Token inválido' });
+      return;
+    }
+
+    res.status(401).json({ message: 'Token inválido' });
   }
 };

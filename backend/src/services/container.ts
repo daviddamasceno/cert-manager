@@ -4,9 +4,11 @@ import { CertificateService } from './certificateService';
 import { AlertModelService } from './alertModelService';
 import { AuditService } from './auditService';
 import { ChannelService } from './channelService';
+import { AuthService } from './authService';
 
 const sheetsRepository = new GoogleSheetsRepository();
 
+export const authService = new AuthService(sheetsRepository, sheetsRepository, sheetsRepository);
 export const auditService = new AuditService(sheetsRepository);
 export const channelService = new ChannelService(sheetsRepository, auditService);
 export const certificateService = new CertificateService(sheetsRepository, auditService);
