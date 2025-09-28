@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, Fragment, useEffect, useMemo, useState } from 'react';
+﻿import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   listCertificates,
@@ -68,13 +68,10 @@ const CertificatesPage: React.FC = () => {
     handleSubmit,
     reset,
     watch,
-    setValue,
     formState: { errors }
   } = useForm<CertificateFormValues>({
     defaultValues: defaultFormValues
   });
-
-  const { ref: channelIdsRef } = register('channelIds');
 
   const selectedChannelIds = watch('channelIds') ?? [];
 
@@ -100,8 +97,6 @@ const CertificatesPage: React.FC = () => {
     });
     return groups;
   }, [activeChannels]);
-
-  const channelSelectSize = Math.min(8, Math.max(3, activeChannels.length));
 
   const fetchData = async () => {
     setLoading(true);
@@ -194,11 +189,6 @@ const CertificatesPage: React.FC = () => {
     } catch (error) {
       notify({ type: 'error', title: 'Não foi possível enviar o teste' });
     }
-  };
-
-  const handleChannelSelect = (event: ChangeEvent<HTMLSelectElement>) => {
-    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-    setValue('channelIds', selected, { shouldDirty: true });
   };
 
   return (
@@ -411,34 +401,61 @@ const CertificatesPage: React.FC = () => {
                           Nenhuma instância de canal ativa cadastrada.
                         </p>
                       ) : (
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-3 space-y-4">
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             Selecione uma ou mais instâncias ativas. Os canais estão agrupados pelo tipo configurado.
                           </p>
-                          <select
-                            multiple
-                            ref={channelIdsRef}
-                            value={selectedChannelIds}
-                            onChange={handleChannelSelect}
-                            size={channelSelectSize}
-                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                          >
+                          <div className="grid gap-5 md:grid-cols-2">
                             {(Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[]).map((type) => {
                               const group = groupedChannels.get(type);
                               if (!group || group.length === 0) {
                                 return null;
                               }
+
                               return (
-                                <optgroup key={type} label={CHANNEL_TYPE_LABELS[type]}>
-                                  {group.map((summary) => (
-                                    <option key={summary.channel.id} value={summary.channel.id}>
-                                      {summary.channel.name}
-                                    </option>
-                                  ))}
-                                </optgroup>
+                                <div key={type} className="space-y-3">
+                                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    {CHANNEL_TYPE_LABELS[type]}
+                                  </h4>
+                                  <div className="space-y-2">
+                                    {group.map((summary) => {
+                                      const checkboxId = `channel-${summary.channel.id}`;
+                                      const isChecked = selectedChannelIds.includes(summary.channel.id);
+
+                                      return (
+                                        <label
+                                          key={summary.channel.id}
+                                          htmlFor={checkboxId}
+                                          className={clsx(
+                                            'flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm shadow-sm transition focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-offset-0 focus-visible:outline-none',
+                                            'border border-slate-200 bg-white text-slate-600 hover:border-primary-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:bg-slate-800/80',
+                                            isChecked &&
+                                              'border-primary-500 bg-primary-50 text-slate-900 dark:bg-primary-500/20 dark:text-slate-100'
+                                          )}
+                                        >
+                                          <div className="flex items-center gap-3">
+                                            <input
+                                              id={checkboxId}
+                                              type="checkbox"
+                                              value={summary.channel.id}
+                                              defaultChecked={isChecked}
+                                              className="h-4 w-4 rounded border-slate-400 bg-white text-primary-600 transition focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-white dark:border-slate-600 dark:bg-slate-900 dark:focus:ring-offset-slate-900"
+                                              {...register('channelIds')}
+                                            />
+                                            <div className="flex flex-col">
+                                              <span className="font-medium text-slate-700 dark:text-slate-100">
+                                                {CHANNEL_TYPE_LABELS[summary.channel.type]} - {summary.channel.name}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               );
                             })}
-                          </select>
+                          </div>
                           {selectedChannelIds.length > 0 ? (
                             <p className="text-xs text-slate-500 dark:text-slate-400">
                               Selecionados:{' '}
