@@ -24,3 +24,4 @@ export const requireRole = (roles: Role[]): RequestHandler => {
 };
 
 export const requireAnyRole = (): RequestHandler => requireRole(['viewer', 'editor']);
+export const requireAdmin = (): RequestHandler => requireRole(['admin']);

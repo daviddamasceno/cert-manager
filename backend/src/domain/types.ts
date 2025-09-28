@@ -13,7 +13,10 @@ export type AuditAction =
   | 'test_send'
   | 'link'
   | 'unlink'
-  | 'notification_sent';
+  | 'notification_sent'
+  | 'user_create'
+  | 'user_update'
+  | 'user_disable';
 
 export interface Certificate {
   id: string;
@@ -80,7 +83,7 @@ export interface AuditLog {
   note?: string;
 }
 
-export type UserStatus = 'active' | 'inactive';
+export type UserStatus = 'active' | 'inactive' | 'disabled';
 
 export interface User {
   id: string;

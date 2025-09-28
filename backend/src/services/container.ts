@@ -5,6 +5,7 @@ import { AlertModelService } from './alertModelService';
 import { AuditService } from './auditService';
 import { ChannelService } from './channelService';
 import { AuthService } from './authService';
+import { UserService } from './userService';
 
 const sheetsRepository = new GoogleSheetsRepository();
 
@@ -14,6 +15,7 @@ export const certificateService = new CertificateService(sheetsRepository, audit
 export const alertModelService = new AlertModelService(sheetsRepository);
 export const notificationService = new NotificationService(auditService, channelService);
 export const authService = new AuthService(sheetsRepository, sheetsRepository, sheetsRepository);
+export const userService = new UserService(sheetsRepository, sheetsRepository, auditService);
 
 export const initializeServices = (): void => {
   // reserved for future initialisation (plugins, caches, etc.)
