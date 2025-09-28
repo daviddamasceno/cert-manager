@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { GaxiosError, GaxiosResponse } from 'gaxios';
 import { google, sheets_v4 } from 'googleapis';
 import { v4 as uuid } from 'uuid';
 import config from '../src/config/env';
@@ -70,6 +71,24 @@ const mapRow = (header: string[], row: string[]): SheetRecord => {
   return record;
 };
 
+const isMissingSheetError = (error: unknown): error is GaxiosError => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const gaxiosError = error as GaxiosError;
+  const status = gaxiosError?.response?.status;
+  if (status !== 400) {
+    return false;
+  }
+
+  const message =
+    (gaxiosError.response?.data as { error?: { message?: string } })?.error?.message ||
+    gaxiosError.message;
+
+  return typeof message === 'string' && message.includes('Unable to parse range');
+};
+
 async function ensureSheet(
   sheets: SheetsClient,
   spreadsheetId: string,
@@ -78,14 +97,40 @@ async function ensureSheet(
 ): Promise<void> {
   const range = `${tab}!A1:${String.fromCharCode(65 + header.length - 1)}1`;
 
-  const response = await withRetry(() =>
-    sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range
-    })
-  );
+  let response: GaxiosResponse<sheets_v4.Schema$ValueRange> | undefined;
 
-  const values = response.data.values;
+  try {
+    response = await withRetry(() =>
+      sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range
+      })
+    );
+  } catch (error) {
+    if (!isMissingSheetError(error)) {
+      throw error;
+    }
+
+    await withRetry(() =>
+      sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: tab
+                }
+              }
+            }
+          ]
+        }
+      })
+    );
+    logger.info({ tab }, 'Sheet created');
+  }
+
+  const values = response?.data?.values;
   if (!values || !values.length) {
     await withRetry(() =>
       sheets.spreadsheets.values.update({
