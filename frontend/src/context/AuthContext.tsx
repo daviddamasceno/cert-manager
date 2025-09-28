@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, attachAuthInterceptor, setAccessToken as applyAccessToken } from '../services/apiClient';
 
 type User = {
@@ -8,7 +8,6 @@ type User = {
 
 type AuthResponse = {
   accessToken: string;
-  refreshToken: string;
   expiresIn: number;
 };
 
@@ -21,8 +20,6 @@ type AuthContextValue = {
   refreshSession: () => Promise<string | null>;
 };
 
-const STORAGE_KEY = 'cert-manager-auth';
-
 const decodeToken = (token: string): User | null => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -33,43 +30,23 @@ const decodeToken = (token: string): User | null => {
   }
 };
 
-const persistTokens = (data: AuthResponse): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-};
-
-const readTokens = (): AuthResponse | null => {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as AuthResponse;
-  } catch (error) {
-    console.error('Erro ao ler sess?o persistida', error);
-    return null;
-  }
-};
-
-const clearTokens = (): void => {
-  localStorage.removeItem(STORAGE_KEY);
-};
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const refreshTokenRef = useRef<string | null>(null);
 
   const applySession = useCallback((payload: AuthResponse) => {
     setAccessToken(payload.accessToken);
-    setRefreshToken(payload.refreshToken);
-    refreshTokenRef.current = payload.refreshToken;
-    persistTokens(payload);
     applyAccessToken(payload.accessToken);
     setUser(decodeToken(payload.accessToken));
+  }, []);
+
+  const clearSession = useCallback(() => {
+    setAccessToken(null);
+    setUser(null);
+    applyAccessToken(null);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -78,47 +55,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [applySession]);
 
   const logout = useCallback(() => {
-    setAccessToken(null);
-    setRefreshToken(null);
-    refreshTokenRef.current = null;
-    setUser(null);
-    clearTokens();
-    applyAccessToken(null);
-  }, []);
+    clearSession();
+    api.post('/auth/logout').catch(() => {});
+  }, [clearSession]);
 
   const refreshSession = useCallback(async (): Promise<string | null> => {
-    const currentRefresh = refreshTokenRef.current;
-    if (!currentRefresh) {
-      logout();
-      return null;
-    }
     try {
-      const { data } = await api.post<AuthResponse>('/auth/refresh', { refreshToken: currentRefresh });
+      const { data } = await api.post<AuthResponse>('/auth/refresh');
       applySession(data);
       return data.accessToken;
     } catch (error) {
-      logout();
+      clearSession();
       return null;
     }
-  }, [applySession, logout]);
+  }, [applySession, clearSession]);
 
   useEffect(() => {
-    const persisted = readTokens();
-    if (persisted) {
-      applySession(persisted);
-    }
-    setLoading(false);
-  }, [applySession]);
+    attachAuthInterceptor(refreshSession);
+  }, [refreshSession]);
 
   useEffect(() => {
-    refreshTokenRef.current = refreshToken;
-  }, [refreshToken]);
-
-  useEffect(() => {
-    attachAuthInterceptor(
-      async () => refreshTokenRef.current,
-      async () => refreshSession()
-    );
+    (async () => {
+      try {
+        await refreshSession();
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [refreshSession]);
 
   const value = useMemo<AuthContextValue>(() => ({

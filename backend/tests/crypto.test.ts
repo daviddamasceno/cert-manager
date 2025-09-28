@@ -1,4 +1,5 @@
-﻿process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+process.env.APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.JWT_EXPIRES_IN = '15m';
 process.env.JWT_REFRESH_EXPIRES_IN = '7d';
 process.env.ADMIN_EMAIL = 'admin@example.com';

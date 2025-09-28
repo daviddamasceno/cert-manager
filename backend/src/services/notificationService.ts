@@ -6,6 +6,7 @@ import {
   ChannelNotificationResult,
   ChannelService
 } from './channelService';
+import { parseEmailList } from '../utils/validators';
 
 interface TemplateContext {
   certificate: Certificate;
@@ -40,10 +41,7 @@ export class NotificationService {
     if (!ownerEmail) {
       return [];
     }
-    return ownerEmail
-      .split(/[,;]+/)
-      .map((email) => email.trim())
-      .filter((email) => email.length > 0);
+    return parseEmailList(ownerEmail, 'owner_email');
   }
 
   async sendAlerts(

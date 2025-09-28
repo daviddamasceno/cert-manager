@@ -9,6 +9,14 @@ import {
 } from '../domain/types';
 import { ChannelRepository } from '../repositories/interfaces';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
+import {
+  assertValidEmail,
+  assertValidHostname,
+  assertValidHttpUrl,
+  assertValidPort,
+  assertValidPositiveInteger,
+  sanitizeString
+} from '../utils/validators';
 import { AuditService } from './auditService';
 
 const CHANNEL_DEFINITIONS: Record<ChannelType, { params: string[]; secrets: string[] }> = {
@@ -322,10 +330,11 @@ export class ChannelService {
     switch (channel.type) {
       case 'email_smtp': {
         const recipients =
-          payload.email?.to?.map((email) => email.trim()).filter((email) => email.length > 0) ?? [];
+          payload.email?.to?.map((email) => sanitizeString(email)).filter((email) => email.length > 0) ?? [];
         if (!recipients.length) {
           throw new Error('Nenhum destinatario de email informado');
         }
+        recipients.forEach((recipient) => assertValidEmail(recipient, 'email_to'));
         const subject = payload.subject?.trim() || `Alerta: ${channel.name}`;
         await this.sendEmailMessage(channel, paramMap, secretMap, {
           to: recipients,
@@ -380,11 +389,12 @@ export class ChannelService {
 
   private extractEmailRecipient(input: Record<string, unknown>): string {
     const toRaw = [input['to'], input['to_email']]
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .map((value) => sanitizeString(value))
       .find((value) => value.length > 0);
     if (!toRaw) {
       throw new Error('Parametro to_email obrigatorio');
     }
+    assertValidEmail(toRaw, 'to_email');
     return toRaw;
   }
 
@@ -603,9 +613,18 @@ export class ChannelService {
     const currentMap = new Map(existing.map((param) => [param.key, param.value]));
 
     definition.params.forEach((key) => {
-      const value = incoming[key] ?? currentMap.get(key) ?? '';
-      currentMap.set(key, String(value));
+      if (Object.prototype.hasOwnProperty.call(incoming, key)) {
+        currentMap.set(key, sanitizeString(incoming[key]));
+        return;
+      }
+      if (currentMap.has(key)) {
+        currentMap.set(key, sanitizeString(currentMap.get(key)));
+        return;
+      }
+      currentMap.set(key, '');
     });
+
+    this.validateChannelParams(type, currentMap);
 
     return Array.from(currentMap.entries()).map(([key, value]) => ({
       channelId,
@@ -626,15 +645,24 @@ export class ChannelService {
     const currentMap = new Map(existing.map((secret) => [secret.key, secret.valueCiphertext]));
 
     definition.secrets.forEach((key) => {
-      if (incoming[key] === undefined) {
+      if (!Object.prototype.hasOwnProperty.call(incoming, key)) {
         return;
       }
+
       const value = incoming[key];
-      if (value === null || value === '') {
+      if (value === null || value === undefined) {
         currentMap.delete(key);
-      } else {
-        currentMap.set(key, encryptSecret(String(value)));
+        return;
       }
+
+      const sanitized = sanitizeString(value);
+      if (!sanitized) {
+        currentMap.delete(key);
+        return;
+      }
+
+      this.validateChannelSecret(type, key, sanitized);
+      currentMap.set(key, encryptSecret(sanitized));
     });
 
     return Array.from(currentMap.entries()).map(([key, valueCiphertext]) => ({
@@ -643,6 +671,70 @@ export class ChannelService {
       valueCiphertext,
       updatedAt: timestamp
     }));
+  }
+
+  private validateChannelParams(type: ChannelType, params: Map<string, string>): void {
+    const timeout = params.get('timeout_ms');
+    if (timeout) {
+      assertValidPositiveInteger(timeout, 'timeout_ms');
+    }
+
+    switch (type) {
+      case 'email_smtp': {
+        const host = params.get('smtp_host');
+        if (host) {
+          assertValidHostname(host, 'smtp_host');
+        }
+        const port = params.get('smtp_port');
+        if (port) {
+          assertValidPort(port, 'smtp_port');
+        }
+        const fromEmail = params.get('from_email');
+        if (fromEmail) {
+          assertValidEmail(fromEmail, 'from_email');
+        }
+        const tls = params.get('tls');
+        if (tls && tls !== 'on' && tls !== 'off') {
+          throw new Error('O campo tls deve ser "on" ou "off".');
+        }
+        break;
+      }
+      case 'telegram_bot': {
+        const chatIdsRaw = params.get('chat_ids');
+        if (chatIdsRaw) {
+          const ids = chatIdsRaw
+            .split(',')
+            .map((value) => sanitizeString(value))
+            .filter((value) => value.length > 0);
+          if (!ids.length) {
+            throw new Error('Informe pelo menos um chat_id para o canal do Telegram.');
+          }
+          params.set('chat_ids', ids.join(','));
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  private validateChannelSecret(type: ChannelType, key: string, value: string): void {
+    if (key === 'webhook_url') {
+      assertValidHttpUrl(value, key);
+      return;
+    }
+
+    if (type === 'email_smtp' && key === 'smtp_pass') {
+      return;
+    }
+
+    if (type === 'telegram_bot' && key === 'bot_token') {
+      return;
+    }
+
+    if (!value) {
+      throw new Error(`O segredo ${key} não pode ser vazio.`);
+    }
   }
 
   private composeParamMap(type: ChannelType, params: ChannelParam[]): Record<string, string> {

@@ -1,10 +1,12 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
+import { assertValidHttpUrl } from '../utils/validators';
 
 dotenv.config();
 
 export interface AppConfig {
   port: number;
   env: string;
+  appBaseUrl: string;
   jwtSecret: string;
   jwtExpiresIn: string;
   jwtRefreshExpiresIn: string;
@@ -27,6 +29,8 @@ export interface AppConfig {
   rateLimits: {
     testChannelWindowMs: number;
     testChannelMax: number;
+    sensitiveRouteWindowMs: number;
+    sensitiveRouteMax: number;
   };
 }
 
@@ -53,9 +57,16 @@ const decodeBase64 = (value: string): string => {
   }
 };
 
+const normalizeAppBaseUrl = (value: string): string => {
+  assertValidHttpUrl(value, 'APP_BASE_URL');
+  const parsed = new URL(value);
+  return parsed.origin;
+};
+
 const config: AppConfig = {
   port: numeric(process.env.PORT, 8080),
   env: process.env.NODE_ENV || 'development',
+  appBaseUrl: normalizeAppBaseUrl(required(process.env.APP_BASE_URL, 'APP_BASE_URL')),
   jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
@@ -79,7 +90,9 @@ const config: AppConfig = {
   logLevel: process.env.LOG_LEVEL || 'info',
   rateLimits: {
     testChannelWindowMs: numeric(process.env.RATE_LIMIT_TEST_WINDOW_MS, 60000),
-    testChannelMax: numeric(process.env.RATE_LIMIT_TEST_MAX, 5)
+    testChannelMax: numeric(process.env.RATE_LIMIT_TEST_MAX, 5),
+    sensitiveRouteWindowMs: numeric(process.env.RATE_LIMIT_SENSITIVE_WINDOW_MS, 60000),
+    sensitiveRouteMax: numeric(process.env.RATE_LIMIT_SENSITIVE_MAX, 10)
   }
 };
 
