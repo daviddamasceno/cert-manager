@@ -92,6 +92,10 @@ channelController.post(
 
 channelController.delete('/:id', async (req: AuthenticatedRequest, res) => {
   const actor = resolveRequestActor(req);
-  await channelService.softDelete(req.params.id, actor);
-  res.status(204).send();
+  try {
+    await channelService.softDelete(req.params.id, actor);
+    res.status(204).send();
+  } catch (error) {
+    res.status(400).json({ message: String(error) });
+  }
 });

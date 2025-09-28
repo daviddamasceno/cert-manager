@@ -1,6 +1,11 @@
 ﻿import { v4 as uuid } from 'uuid';
-import { AuditActor, Certificate, CertificateStatus, CertificateChannelLink } from '../domain/types';
-import { CertificateRepository } from '../repositories/interfaces';
+import {
+  AuditActor,
+  Certificate,
+  CertificateStatus,
+  CertificateChannelLink
+} from '../domain/types';
+import { CertificateRepository, ChannelRepository } from '../repositories/interfaces';
 import { AuditService } from './auditService';
 import { normalizeEmailList, sanitizeString } from '../utils/validators';
 
@@ -18,7 +23,8 @@ export interface CertificateInput {
 export class CertificateService {
   constructor(
     private readonly certificateRepository: CertificateRepository,
-    private readonly auditService: AuditService
+    private readonly auditService: AuditService,
+    private readonly channelRepository: ChannelRepository
   ) {}
 
   async list(): Promise<Certificate[]> {
@@ -30,6 +36,16 @@ export class CertificateService {
   }
 
   async create(input: CertificateInput, actor: AuditActor): Promise<Certificate> {
+    const sanitizedChannelIds = this.normalizeChannelIds(input.channelIds);
+    const { valid: validChannelIds, invalid: invalidChannelIds } = await this.validateChannelIds(
+      sanitizedChannelIds
+    );
+    if (invalidChannelIds.length) {
+      throw new Error(
+        `Alguns canais selecionados não estão disponíveis: ${invalidChannelIds.join(', ')}`
+      );
+    }
+
     const certificate: Certificate = {
       id: uuid(),
       name: this.normalizeCertificateName(input.name),
@@ -39,7 +55,7 @@ export class CertificateService {
       status: this.parseStatus(input.status, 'active'),
       alertModelId: this.normalizeOptionalString(input.alertModelId),
       notes: this.normalizeNotes(input.notes),
-      channelIds: this.normalizeChannelIds(input.channelIds)
+      channelIds: validChannelIds
     };
 
     await this.certificateRepository.createCertificate(certificate);
@@ -91,25 +107,32 @@ export class CertificateService {
     if (input.notes !== undefined) {
       sanitizedUpdates.notes = this.normalizeNotes(input.notes);
     }
+    let channelIdsToSync: string[] | undefined;
     if (input.channelIds !== undefined) {
-      sanitizedUpdates.channelIds = this.normalizeChannelIds(input.channelIds);
+      const normalizedChannelIds = this.normalizeChannelIds(input.channelIds);
+      const { valid, invalid } = await this.validateChannelIds(normalizedChannelIds);
+      if (invalid.length) {
+        throw new Error(`Alguns canais selecionados não estão disponíveis: ${invalid.join(', ')}`);
+      }
+      sanitizedUpdates.channelIds = valid;
+      channelIdsToSync = valid;
     }
 
     const updated = await this.certificateRepository.updateCertificate(id, {
       ...sanitizedUpdates,
-      channelIds: sanitizedUpdates.channelIds ?? current.channelIds
+      channelIds: channelIdsToSync ?? current.channelIds
     });
 
-    if (sanitizedUpdates.channelIds !== undefined) {
-      await this.syncChannels(id, sanitizedUpdates.channelIds, actor);
+    if (channelIdsToSync !== undefined) {
+      await this.syncChannels(id, channelIdsToSync, actor);
     }
 
     const diff: Record<string, { old?: unknown; new?: unknown }> = {};
     if (sanitizedUpdates.name) {
       diff.name = { old: current.name, new: sanitizedUpdates.name };
     }
-    if (sanitizedUpdates.channelIds !== undefined) {
-      diff.channelIds = { old: current.channelIds, new: sanitizedUpdates.channelIds };
+    if (channelIdsToSync !== undefined) {
+      diff.channelIds = { old: current.channelIds, new: channelIdsToSync };
     }
     await this.auditService.record({
       actorUserId: actor.id,
@@ -144,14 +167,19 @@ export class CertificateService {
   }
 
   async setChannelLinks(id: string, channelIds: string[], actor: AuditActor): Promise<void> {
-    await this.syncChannels(id, channelIds, actor);
+    const normalizedChannelIds = this.normalizeChannelIds(channelIds);
+    const { valid, invalid } = await this.validateChannelIds(normalizedChannelIds);
+    if (invalid.length) {
+      throw new Error(`Alguns canais selecionados não estão disponíveis: ${invalid.join(', ')}`);
+    }
+    await this.syncChannels(id, valid, actor);
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
       entity: 'certificate',
       entityId: id,
       action: 'update',
-      diff: { channelIds: { old: 'replaced', new: channelIds } },
+      diff: { channelIds: { old: 'replaced', new: valid } },
       ip: actor.ip,
       userAgent: actor.userAgent
     });
@@ -225,5 +253,36 @@ export class CertificateService {
       linkedByUserId: actor.id
     }));
     await this.certificateRepository.setCertificateChannels(certificateId, links);
+  }
+
+  private async validateChannelIds(channelIds: string[]): Promise<{
+    valid: string[];
+    invalid: string[];
+  }> {
+    if (!channelIds.length) {
+      return { valid: [], invalid: [] };
+    }
+
+    const channels = await this.channelRepository.listChannels();
+    const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    const seen = new Set<string>();
+
+    for (const channelId of channelIds) {
+      if (seen.has(channelId)) {
+        continue;
+      }
+      seen.add(channelId);
+
+      const channel = channelMap.get(channelId);
+      if (!channel || channel.deleted || !channel.enabled) {
+        invalid.push(channelId);
+      } else {
+        valid.push(channelId);
+      }
+    }
+
+    return { valid, invalid };
   }
 }

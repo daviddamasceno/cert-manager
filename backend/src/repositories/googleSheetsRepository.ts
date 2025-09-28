@@ -61,7 +61,7 @@ const HEADERS: Record<string, string[]> = {
     'template_subject',
     'template_body'
   ],
-  [SHEET_CHANNELS]: ['id', 'name', 'type', 'enabled', 'created_at', 'updated_at'],
+  [SHEET_CHANNELS]: ['id', 'name', 'type', 'enabled', 'deleted', 'created_at', 'updated_at'],
   [SHEET_CHANNEL_PARAMS]: ['channel_id', 'key', 'value', 'updated_at'],
   [SHEET_CHANNEL_SECRETS]: ['channel_id', 'key', 'value_ciphertext', 'updated_at'],
   [SHEET_CERTIFICATE_CHANNELS]: ['certificate_id', 'channel_id', 'linked_at', 'linked_by_user_id'],
@@ -545,6 +545,7 @@ export class GoogleSheetsRepository
         name: map['name'] || '',
         type: (map['type'] as ChannelType) || 'email_smtp',
         enabled: (map['enabled'] || 'true').toLowerCase() === 'true',
+        deleted: (map['deleted'] || 'false').toLowerCase() === 'true',
         createdAt: map['created_at'] || new Date().toISOString(),
         updatedAt: map['updated_at'] || new Date().toISOString()
       };
@@ -562,6 +563,7 @@ export class GoogleSheetsRepository
       channel.name,
       channel.type,
       channel.enabled ? 'true' : 'false',
+      channel.deleted ? 'true' : 'false',
       channel.createdAt,
       channel.updatedAt
     ]);
@@ -582,6 +584,7 @@ export class GoogleSheetsRepository
         channel.name,
         channel.type,
         channel.enabled ? 'true' : 'false',
+        channel.deleted ? 'true' : 'false',
         map['created_at'] || channel.createdAt,
         channel.updatedAt
       ];
@@ -601,11 +604,69 @@ export class GoogleSheetsRepository
       {
         ...channel,
         enabled: false,
+        deleted: true,
         updatedAt: timestamp
       },
       await this.getChannelParams(id),
       await this.getChannelSecrets(id)
     );
+  }
+
+  async unlinkChannel(channelId: string): Promise<CertificateChannelLink[]> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_CERTIFICATE_CHANNELS,
+      HEADERS[SHEET_CERTIFICATE_CHANNELS]
+    );
+
+    const keptRows: string[][] = [];
+    const removedLinks: CertificateChannelLink[] = [];
+
+    rows.forEach((row) => {
+      const map = this.mapRow(header, row);
+      if (map['channel_id'] !== channelId) {
+        keptRows.push(row);
+        return;
+      }
+      removedLinks.push({
+        certificateId: map['certificate_id'],
+        channelId: map['channel_id'],
+        linkedAt: map['linked_at'],
+        linkedByUserId: map['linked_by_user_id']
+      });
+    });
+
+    await this.write(SHEET_CERTIFICATE_CHANNELS, [header, ...keptRows]);
+
+    if (removedLinks.length === 0) {
+      return removedLinks;
+    }
+
+    const affectedCertificates = new Set(removedLinks.map((link) => link.certificateId));
+
+    const { header: certificateHeader, rows: certificateRows } = await this.readSheetWithHeader(
+      SHEET_CERTIFICATES,
+      HEADERS[SHEET_CERTIFICATES]
+    );
+    const channelIdx = certificateHeader.indexOf('channel_ids');
+
+    if (channelIdx >= 0) {
+      const updatedCertificateRows = certificateRows.map((row) => {
+        const map = this.mapRow(certificateHeader, row);
+        if (!affectedCertificates.has(map['id'])) {
+          return row;
+        }
+        const currentIds = map['channel_ids']
+          ? map['channel_ids'].split(',').map((value) => value.trim()).filter(Boolean)
+          : [];
+        const filtered = currentIds.filter((currentId) => currentId !== channelId);
+        const clone = [...row];
+        clone[channelIdx] = filtered.join(',');
+        return clone;
+      });
+      await this.write(SHEET_CERTIFICATES, [certificateHeader, ...updatedCertificateRows]);
+    }
+
+    return removedLinks;
   }
 
   async getChannelParams(id: string): Promise<ChannelParam[]> {

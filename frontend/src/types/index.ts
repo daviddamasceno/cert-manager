@@ -43,6 +43,7 @@ export interface ChannelInstance {
   name: string;
   type: ChannelType;
   enabled: boolean;
+  deleted: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -35,6 +35,7 @@ export interface ChannelRepository {
   createChannel(channel: ChannelInstance, params: ChannelParam[], secrets: ChannelSecret[]): Promise<void>;
   updateChannel(channel: ChannelInstance, params: ChannelParam[], secrets: ChannelSecret[]): Promise<void>;
   softDeleteChannel(id: string, timestamp: string): Promise<void>;
+  unlinkChannel(channelId: string): Promise<CertificateChannelLink[]>;
   getChannelParams(id: string): Promise<ChannelParam[]>;
   getChannelSecrets(id: string): Promise<ChannelSecret[]>;
 }

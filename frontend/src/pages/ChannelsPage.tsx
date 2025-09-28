@@ -1,13 +1,13 @@
 ﻿import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Dialog, Transition, Switch } from '@headlessui/react';
-import { PlusIcon, PencilSquareIcon, PowerIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilSquareIcon, PowerIcon, TrashIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { useForm } from 'react-hook-form';
 import dayjs from 'dayjs';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { ChannelSummary, ChannelType } from '../types';
-import { createChannel, disableChannel, listChannels, testChannel, updateChannel } from '../services/channels';
+import { createChannel, deleteChannel, listChannels, testChannel, updateChannel } from '../services/channels';
 
 interface FormValues {
   name: string;
@@ -88,6 +88,8 @@ const ChannelsPage: React.FC = () => {
   const [existingSecrets, setExistingSecrets] = useState<Record<string, boolean>>({});
   const [testTarget, setTestTarget] = useState('');
   const [testing, setTesting] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<ChannelSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { notify } = useToast();
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'editor';
@@ -195,15 +197,45 @@ const ChannelsPage: React.FC = () => {
     }
 
     try {
-      if (channel.channel.enabled) {
-        await disableChannel(channel.channel.id);
-      } else {
-        await updateChannel(channel.channel.id, { enabled: true });
-      }
+      await updateChannel(channel.channel.id, { enabled: !channel.channel.enabled });
       notify({ type: 'success', title: 'Status atualizado' });
       await fetchChannels();
     } catch (error) {
       notify({ type: 'error', title: 'Erro ao atualizar status' });
+    }
+  };
+
+  const openDeleteModal = (summary: ChannelSummary) => {
+    if (!canManage) {
+      return;
+    }
+    setDeleteCandidate(summary);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) {
+      return;
+    }
+    setDeleteCandidate(null);
+  };
+
+  const handleDeleteChannel = async () => {
+    if (!deleteCandidate) {
+      return;
+    }
+    try {
+      setDeleting(true);
+      await deleteChannel(deleteCandidate.channel.id);
+      notify({ type: 'success', title: 'Canal excluído' });
+      setDeleteCandidate(null);
+      await fetchChannels();
+    } catch (error) {
+      const description =
+        (error as any)?.response?.data?.message ||
+        (error instanceof Error ? error.message : 'Não foi possível excluir o canal.');
+      notify({ type: 'error', title: 'Erro ao excluir canal', description });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -361,6 +393,14 @@ const ChannelsPage: React.FC = () => {
                         >
                           <PowerIcon className="mr-1 h-4 w-4" />
                           {summary.channel.enabled ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteModal(summary)}
+                          className="inline-flex items-center rounded-md border border-rose-500/60 px-2 py-1 text-xs text-rose-600 hover:bg-rose-500/10 dark:border-rose-400/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                        >
+                          <TrashIcon className="mr-1 h-4 w-4" />
+                          Excluir
                         </button>
                       </div>
                     </td>
@@ -617,6 +657,70 @@ const ChannelsPage: React.FC = () => {
                       </button>
                     </div>
                   </form>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      <Transition appear show={Boolean(deleteCandidate)} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={closeDeleteModal}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-150"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-slate-900/60" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all dark:bg-slate-900">
+                  <Dialog.Title className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Excluir canal
+                  </Dialog.Title>
+                  <div className="mt-2 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <p>
+                      Tem certeza que deseja excluir o canal{' '}
+                      <span className="font-semibold text-slate-900 dark:text-white">
+                        {deleteCandidate?.channel.name}
+                      </span>
+                      ?
+                    </p>
+                    <p>Ele será desvinculado de todos os certificados.</p>
+                  </div>
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={closeDeleteModal}
+                      className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      disabled={deleting}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteChannel}
+                      className="inline-flex items-center rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deleting}
+                    >
+                      {deleting ? 'Excluindo...' : 'Excluir canal'}
+                    </button>
+                  </div>
                 </Dialog.Panel>
               </Transition.Child>
             </div>
