@@ -255,7 +255,11 @@ const UsersPage: React.FC = () => {
       notify({
         type: 'success',
         title: 'Senha redefinida',
-        description: `Nova senha temporária: ${temporaryPassword}`
+        description: 'Use a senha temporária abaixo para o próximo acesso.',
+        copyable: {
+          label: 'Senha temporária',
+          value: temporaryPassword
+        }
       });
     } catch (error) {
       const message = getErrorMessage(error) ?? 'Não foi possível redefinir a senha.';
