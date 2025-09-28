@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt, { SignOptions, Secret } from 'jsonwebtoken';
 import config from '../config/env';
+import { parseDurationToSeconds } from '../utils/duration';
 
 interface TokenPayload {
   sub: string;
@@ -31,7 +32,7 @@ class AuthService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: this.parseDurationToSeconds(config.jwtExpiresIn)
+      expiresIn: parseDurationToSeconds(config.jwtExpiresIn)
     };
   }
 
@@ -44,7 +45,7 @@ class AuthService {
     return {
       accessToken,
       refreshToken: newRefreshToken,
-      expiresIn: this.parseDurationToSeconds(config.jwtExpiresIn)
+      expiresIn: parseDurationToSeconds(config.jwtExpiresIn)
     };
   }
 
@@ -67,23 +68,6 @@ class AuthService {
     return jwt.sign(payload, config.jwtSecret as Secret, options);
   }
 
-  private parseDurationToSeconds(duration: string): number {
-    const match = duration.match(/^(\d+)([smhd])$/);
-    if (!match) {
-      return 0;
-    }
-    const value = Number(match[1]);
-    const unit = match[2];
-
-    const multipliers: Record<string, number> = {
-      s: 1,
-      m: 60,
-      h: 3600,
-      d: 86400
-    };
-
-    return value * multipliers[unit];
-  }
 }
 
 export const authService = new AuthService();

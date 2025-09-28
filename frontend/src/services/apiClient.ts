@@ -3,7 +3,8 @@
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 export const api: AxiosInstance = axios.create({
-  baseURL: `${baseURL}/api`
+  baseURL: `${baseURL}/api`,
+  withCredentials: true
 });
 
 export const setAccessToken = (token: string | null): void => {
@@ -18,10 +19,7 @@ export const withAuth = <T>(config: AxiosRequestConfig<T> = {}): AxiosRequestCon
   ...config
 });
 
-export const attachAuthInterceptor = (
-  getRefreshToken: () => Promise<string | null>,
-  refresh: () => Promise<string | null>
-): void => {
+export const attachAuthInterceptor = (refresh: () => Promise<string | null>): void => {
   let isRefreshing = false;
   let queue: Array<(token: string | null) => void> = [];
 
