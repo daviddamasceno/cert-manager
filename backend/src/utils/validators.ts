@@ -79,3 +79,36 @@ export const assertValidHostname = (value: string, fieldName: string): void => {
     throw new Error(`O campo ${fieldName} deve ser um host ou domínio válido.`);
   }
 };
+
+const STRONG_PASSWORD_SPECIAL = /[^A-Za-z0-9]/;
+
+export const isStrongPassword = (value: string): boolean => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const password = value.trim();
+  if (password.length < 10) {
+    return false;
+  }
+  if (!/[A-Z]/.test(password)) {
+    return false;
+  }
+  if (!/[a-z]/.test(password)) {
+    return false;
+  }
+  if (!/\d/.test(password)) {
+    return false;
+  }
+  if (!STRONG_PASSWORD_SPECIAL.test(password)) {
+    return false;
+  }
+  return true;
+};
+
+export const assertStrongPassword = (value: string): void => {
+  if (!isStrongPassword(value)) {
+    throw new Error(
+      'A senha deve ter pelo menos 10 caracteres, incluindo letras maiúsculas, minúsculas, números e caracteres especiais.'
+    );
+  }
+};

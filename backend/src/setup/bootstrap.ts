@@ -10,15 +10,18 @@ export const ensureDefaultAlertModel = async (): Promise<void> => {
     return;
   }
 
-  await alertModelService.create({
-    name: DEFAULT_ALERT_MODEL_NAME,
-    offsetDaysBefore: 30,
-    templateSubject: 'Alerta: certificado {{name}} vence em {{days_left}} dias',
-    templateBody:
-      'Ol?,\n\nO certificado {{name}} ir? expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renova??o.\n\nEquipe Cert Manager.',
-    offsetDaysAfter: undefined,
-    repeatEveryDays: 7
-  });
+  await alertModelService.create(
+    {
+      name: DEFAULT_ALERT_MODEL_NAME,
+      offsetDaysBefore: 30,
+      templateSubject: 'Alerta: certificado {{name}} vence em {{days_left}} dias',
+      templateBody:
+        'Olá,\n\nO certificado {{name}} irá expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renovação.\n\nEquipe Cert Manager.',
+      offsetDaysAfter: undefined,
+      repeatEveryDays: 7
+    },
+    { id: 'system', email: 'system@local', ip: 'bootstrap', userAgent: 'bootstrap/setup' }
+  );
 
   logger.info('Default alert model created');
 };

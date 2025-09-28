@@ -6,6 +6,7 @@ import { parseDate, now } from '../utils/time';
 import { sanitizeString } from '../utils/validators';
 import { channelTestRateLimiter } from '../middlewares/rateLimiter';
 import { requireRole } from '../middlewares/roleMiddleware';
+import { resolveRequestActor } from '../utils/requestContext';
 
 const extractChannelIds = (source: Record<string, unknown>): string[] => {
   if (Array.isArray(source.channelIds)) {
@@ -127,7 +128,7 @@ certificateController.get('/', async (req, res) => {
 
 certificateController.post('/', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveRequestActor(req);
     const payload = parseCertificateCreatePayload(req.body);
     const created = await certificateService.create(payload, actor);
     res.status(201).json(created);
@@ -138,7 +139,7 @@ certificateController.post('/', requireRole(['editor']), async (req: Authenticat
 
 certificateController.put('/:id', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
   try {
-    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveRequestActor(req);
     const payload = parseCertificateUpdatePayload(req.body);
     const updated = await certificateService.update(req.params.id, payload, actor);
     res.json(updated);
@@ -148,7 +149,7 @@ certificateController.put('/:id', requireRole(['editor']), async (req: Authentic
 });
 
 certificateController.delete('/:id', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
-  const actor = req.user ?? { id: 'system', email: 'system@local' };
+  const actor = resolveRequestActor(req);
   await certificateService.delete(req.params.id, actor);
   res.status(204).send();
 });
@@ -159,7 +160,7 @@ certificateController.get('/:id/channels', async (req, res) => {
 });
 
 certificateController.post('/:id/channels', requireRole(['editor']), async (req: AuthenticatedRequest, res) => {
-  const actor = req.user ?? { id: 'system', email: 'system@local' };
+  const actor = resolveRequestActor(req);
   const source = (req.body ?? {}) as Record<string, unknown>;
   const channelIds = extractChannelIds(source);
   await certificateService.setChannelLinks(req.params.id, channelIds, actor);
@@ -190,7 +191,7 @@ certificateController.post(
 
     const daysLeft = Math.floor(parseDate(certificate.expiresAt).diff(now(), 'days').days);
 
-    const actor = (req as AuthenticatedRequest).user ?? { id: 'system', email: 'system@local' };
+    const actor = resolveRequestActor(req as AuthenticatedRequest);
 
     try {
       await notificationService.sendAlerts(certificate, alertModel, daysLeft, actor);

@@ -10,6 +10,7 @@ export interface AppConfig {
   jwtSecret: string;
   jwtExpiresIn: string;
   jwtRefreshExpiresIn: string;
+  jwtCookieSameSite: 'lax' | 'strict';
   adminEmail: string;
   adminPasswordHash: string;
   googleServiceAccountJson: string;
@@ -27,6 +28,8 @@ export interface AppConfig {
   };
   logLevel: string;
   rateLimits: {
+    globalWindowMs: number;
+    globalMax: number;
     testChannelWindowMs: number;
     testChannelMax: number;
     sensitiveRouteWindowMs: number;
@@ -63,6 +66,17 @@ const normalizeAppBaseUrl = (value: string): string => {
   return parsed.origin;
 };
 
+const parseSameSite = (value: string | undefined): 'lax' | 'strict' => {
+  if (!value) {
+    return 'lax';
+  }
+  const normalized = value.toLowerCase();
+  if (normalized === 'lax' || normalized === 'strict') {
+    return normalized;
+  }
+  throw new Error('JWT_COOKIE_SAMESITE must be either "lax" or "strict"');
+};
+
 const config: AppConfig = {
   port: numeric(process.env.PORT, 8080),
   env: process.env.NODE_ENV || 'development',
@@ -70,6 +84,7 @@ const config: AppConfig = {
   jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '14d',
+  jwtCookieSameSite: parseSameSite(process.env.JWT_COOKIE_SAMESITE),
   adminEmail: required(process.env.ADMIN_EMAIL, 'ADMIN_EMAIL'),
   adminPasswordHash: required(process.env.ADMIN_PASSWORD_HASH, 'ADMIN_PASSWORD_HASH'),
   googleServiceAccountJson: decodeBase64(
@@ -89,6 +104,8 @@ const config: AppConfig = {
   },
   logLevel: process.env.LOG_LEVEL || 'info',
   rateLimits: {
+    globalWindowMs: numeric(process.env.RATE_LIMIT_GLOBAL_WINDOW_MS, 60000),
+    globalMax: numeric(process.env.RATE_LIMIT_GLOBAL_MAX, 300),
     testChannelWindowMs: numeric(process.env.RATE_LIMIT_TEST_WINDOW_MS, 60000),
     testChannelMax: numeric(process.env.RATE_LIMIT_TEST_MAX, 5),
     sensitiveRouteWindowMs: numeric(process.env.RATE_LIMIT_SENSITIVE_WINDOW_MS, 60000),

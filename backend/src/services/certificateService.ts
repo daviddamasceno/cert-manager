@@ -1,5 +1,5 @@
 ﻿import { v4 as uuid } from 'uuid';
-import { Certificate, CertificateStatus, CertificateChannelLink } from '../domain/types';
+import { AuditActor, Certificate, CertificateStatus, CertificateChannelLink } from '../domain/types';
 import { CertificateRepository } from '../repositories/interfaces';
 import { AuditService } from './auditService';
 import { normalizeEmailList, sanitizeString } from '../utils/validators';
@@ -29,7 +29,7 @@ export class CertificateService {
     return this.certificateRepository.getCertificate(id);
   }
 
-  async create(input: CertificateInput, actor: { id: string; email: string }): Promise<Certificate> {
+  async create(input: CertificateInput, actor: AuditActor): Promise<Certificate> {
     const certificate: Certificate = {
       id: uuid(),
       name: this.normalizeCertificateName(input.name),
@@ -50,7 +50,9 @@ export class CertificateService {
       entity: 'certificate',
       entityId: certificate.id,
       action: 'create',
-      diff: { name: { new: certificate.name } }
+      diff: { name: { new: certificate.name } },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return certificate;
@@ -59,7 +61,7 @@ export class CertificateService {
   async update(
     id: string,
     input: Partial<CertificateInput>,
-    actor: { id: string; email: string }
+    actor: AuditActor
   ): Promise<Certificate> {
     const current = await this.get(id);
     if (!current) {
@@ -115,13 +117,15 @@ export class CertificateService {
       entity: 'certificate',
       entityId: id,
       action: 'update',
-      diff
+      diff,
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return updated;
   }
 
-  async delete(id: string, actor: { id: string; email: string }): Promise<void> {
+  async delete(id: string, actor: AuditActor): Promise<void> {
     await this.certificateRepository.deleteCertificate(id);
     await this.auditService.record({
       actorUserId: actor.id,
@@ -129,7 +133,9 @@ export class CertificateService {
       entity: 'certificate',
       entityId: id,
       action: 'delete',
-      diff: {}
+      diff: {},
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
   }
 
@@ -137,11 +143,7 @@ export class CertificateService {
     return this.certificateRepository.getCertificateChannels(id);
   }
 
-  async setChannelLinks(
-    id: string,
-    channelIds: string[],
-    actor: { id: string; email: string }
-  ): Promise<void> {
+  async setChannelLinks(id: string, channelIds: string[], actor: AuditActor): Promise<void> {
     await this.syncChannels(id, channelIds, actor);
     await this.auditService.record({
       actorUserId: actor.id,
@@ -149,7 +151,9 @@ export class CertificateService {
       entity: 'certificate',
       entityId: id,
       action: 'update',
-      diff: { channelIds: { old: 'replaced', new: channelIds } }
+      diff: { channelIds: { old: 'replaced', new: channelIds } },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
   }
 
@@ -212,7 +216,7 @@ export class CertificateService {
   private async syncChannels(
     certificateId: string,
     channelIds: string[],
-    actor: { id: string; email: string }
+    actor: AuditActor
   ): Promise<void> {
     const links: CertificateChannelLink[] = channelIds.map((channelId) => ({
       certificateId,
