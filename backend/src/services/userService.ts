@@ -172,6 +172,37 @@ export class UserService {
     });
   }
 
+  async resetPassword(id: string, actor: { id: string; email: string }): Promise<{ temporaryPassword: string }> {
+    const user = await this.users.getUserById(id);
+    if (!user) {
+      throw new Error('Usuário não encontrado.');
+    }
+
+    const temporaryPassword = this.generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, PASSWORD_BCRYPT_ROUNDS);
+    const now = new Date().toISOString();
+
+    await this.credentials.setUserCredentials({
+      userId: user.id,
+      passwordHash,
+      passwordUpdatedAt: now,
+      passwordNeedsReset: true
+    });
+
+    await this.audit.record({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      entity: 'user',
+      entityId: id,
+      action: 'user_password_reset',
+      diff: {
+        passwordNeedsReset: { new: true }
+      }
+    });
+
+    return { temporaryPassword };
+  }
+
   private normalizeEmail(value: string): string {
     const email = sanitizeString(value).toLowerCase();
     if (!email) {

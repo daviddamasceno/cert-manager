@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginForm {
@@ -16,19 +16,39 @@ const LoginPage: React.FC = () => {
       password: ''
     }
   });
-  const { login } = useAuth();
+  const { login, accessToken, loading: authLoading } = useAuth();
   const { notify } = useToast();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && accessToken) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [accessToken, authLoading, navigate]);
+
+  const extractErrorMessage = (error: unknown): string | undefined => {
+    if (error && typeof error === 'object') {
+      const message = (error as any)?.response?.data?.message || (error as any)?.message;
+      if (typeof message === 'string' && message.trim().length > 0) {
+        return message;
+      }
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return undefined;
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitting(true);
     try {
       await login(values.email, values.password);
-      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sess?o iniciada com sucesso.' });
+      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sessão iniciada com sucesso.' });
       navigate('/dashboard');
     } catch (error) {
-      notify({ type: 'error', title: 'Falha no login', description: 'Verifique suas credenciais.' });
+      const message = extractErrorMessage(error) ?? 'Verifique suas credenciais e tente novamente.';
+      notify({ type: 'error', title: 'Falha no login', description: message });
     } finally {
       setSubmitting(false);
     }
