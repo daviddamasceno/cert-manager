@@ -76,10 +76,14 @@ router.post('/refresh', async (req, res) => {
 router.post('/logout', async (req: AuthenticatedRequest, res) => {
   const refreshToken = req.cookies?.[authService.refreshCookieName];
   const user = req.user;
-  await authService.logout(refreshToken, user ?? { id: 'unknown', email: 'unknown', role: 'viewer', name: 'unknown', status: 'active', mfaEnabled: false }, {
-    ip: req.ip,
-    userAgent: req.get('user-agent')
-  });
+  await authService.logout(
+    refreshToken,
+    user ?? { id: 'unknown', email: 'unknown', role: 'viewer', name: 'unknown' },
+    {
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    }
+  );
 
   const clearOptions = buildCookieOptions(0);
   res
