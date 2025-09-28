@@ -2,6 +2,7 @@
 import { channelService } from '../services/container';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 import { ChannelType } from '../domain/types';
+import { channelTestRateLimiter } from '../middlewares/rateLimiter';
 
 const isValidType = (value: unknown): value is ChannelType =>
   typeof value === 'string' &&
@@ -72,6 +73,25 @@ channelController.put('/:id', async (req: AuthenticatedRequest, res) => {
     res.status(400).json({ message: String(error) });
   }
 });
+
+channelController.post(
+  '/:id/test',
+  channelTestRateLimiter,
+  async (req: AuthenticatedRequest, res) => {
+    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    try {
+      const { to } = req.body || {};
+      if (!to || typeof to !== 'string') {
+        res.status(400).json({ message: 'Parâmetro to (destinatário) obrigatório' });
+        return;
+      }
+      const result = await channelService.testChannel(req.params.id, { to }, actor);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: String(error) });
+    }
+  }
+);
 
 channelController.delete('/:id', async (req: AuthenticatedRequest, res) => {
   const actor = req.user ?? { id: 'system', email: 'system@local' };

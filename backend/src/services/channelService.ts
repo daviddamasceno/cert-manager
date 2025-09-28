@@ -1,4 +1,5 @@
 ﻿import { v4 as uuid } from 'uuid';
+import nodemailer from 'nodemailer';
 import {
   ChannelInstance,
   ChannelParam,
@@ -6,7 +7,7 @@ import {
   ChannelType
 } from '../domain/types';
 import { ChannelRepository } from '../repositories/interfaces';
-import { encryptSecret } from '../utils/crypto';
+import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { AuditService } from './auditService';
 
 const CHANNEL_DEFINITIONS: Record<ChannelType, { params: string[]; secrets: string[] }> = {
@@ -37,6 +38,11 @@ export interface ChannelResponse {
   channel: ChannelInstance;
   params: Record<string, string>;
   secrets: ChannelSecretSummary[];
+}
+
+export interface ChannelTestResult {
+  success: boolean;
+  error?: string;
 }
 
 export interface ChannelInput {
@@ -189,6 +195,56 @@ export class ChannelService {
     });
   }
 
+  async testChannel(
+    id: string,
+    input: { to: string },
+    actor: { id: string; email: string }
+  ): Promise<ChannelTestResult> {
+    const channel = await this.repository.getChannel(id);
+    if (!channel) {
+      throw new Error('Channel not found');
+    }
+
+    if (!channel.enabled) {
+      throw new Error('Channel disabled');
+    }
+
+    if (channel.type !== 'email_smtp') {
+      throw new Error('Channel type does not support test operation yet');
+    }
+
+    const [params, secrets] = await Promise.all([
+      this.repository.getChannelParams(id),
+      this.repository.getChannelSecrets(id)
+    ]);
+
+    try {
+      await this.sendSmtpTest(channel, params, secrets, input.to);
+      await this.auditService.record({
+        actorUserId: actor.id,
+        actorEmail: actor.email,
+        entity: 'channel',
+        entityId: id,
+        action: 'test_send',
+        diff: {},
+        note: `SMTP test sent to ${input.to}`
+      });
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.auditService.record({
+        actorUserId: actor.id,
+        actorEmail: actor.email,
+        entity: 'channel',
+        entityId: id,
+        action: 'test_send',
+        diff: {},
+        note: `SMTP test failed for ${input.to}: ${message}`
+      });
+      return { success: false, error: message };
+    }
+  }
+
   private async buildParams(
     type: ChannelType,
     channelId: string,
@@ -267,5 +323,48 @@ export class ChannelService {
           ? Boolean(provided[key])
           : stored.has(key)
     }));
+  }
+
+  private async sendSmtpTest(
+    channel: ChannelInstance,
+    params: ChannelParam[],
+    secrets: ChannelSecret[],
+    to: string
+  ): Promise<void> {
+    const paramMap = this.composeParamMap(channel.type, params);
+    const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
+
+    const host = paramMap['smtp_host'];
+    const port = Number(paramMap['smtp_port'] || 587);
+    const user = paramMap['smtp_user'];
+    const fromName = paramMap['from_name'] || 'Cert Manager';
+    const fromEmail = paramMap['from_email'] || user;
+    const tlsFlag = (paramMap['tls'] || '').toLowerCase();
+    const timeout = Number(paramMap['timeout_ms'] || 15000);
+    const encryptedPass = secretMap.get('smtp_pass');
+    const pass = encryptedPass ? decryptSecret(encryptedPass) : undefined;
+
+    if (!host || !port || !fromEmail) {
+      throw new Error('Missing SMTP configuration (host/port/from_email)');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: tlsFlag === 'on' || port === 465,
+      auth: user ? { user, pass } : undefined,
+      connectionTimeout: timeout,
+      greetingTimeout: timeout,
+      socketTimeout: timeout
+    });
+
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+    await transporter.sendMail({
+      from,
+      to,
+      subject: 'Teste de SMTP',
+      text: 'Teste de SMTP realizado com sucesso pelo Cert Manager.'
+    });
   }
 }
