@@ -2,8 +2,8 @@
 import { ChannelSummary } from '../types';
 
 export interface ChannelPayload {
-  name: string;
-  type: string;
+  name?: string;
+  type?: string;
   enabled?: boolean;
   params?: Record<string, string>;
   secrets?: Record<string, string | null>;

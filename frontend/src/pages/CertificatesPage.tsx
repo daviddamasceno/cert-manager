@@ -8,14 +8,17 @@ import {
   sendTestNotification
 } from '../services/certificates';
 import { listAlertModels } from '../services/alertModels';
-import { AlertModel, Certificate, Channel } from '../types';
-import { Dialog, Transition, Switch } from '@headlessui/react';
+import { listChannels } from '../services/channels';
+import { AlertModel, Certificate, ChannelSummary } from '../types';
+import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
-import { PlusIcon, PencilSquareIcon, TrashIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilSquareIcon, TrashIcon, PaperAirplaneIcon, TagIcon } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import clsx from 'clsx';
 import { useToast } from '../context/ToastContext';
+
+dayjs.extend(relativeTime);
 
 interface CertificateFormValues {
   name: string;
@@ -25,11 +28,8 @@ interface CertificateFormValues {
   status: Certificate['status'];
   alertModelId?: string;
   notes?: string;
-  telegramChatId?: string;
-  channels: Record<Channel, boolean>;
+  channelIds: string[];
 }
-
-dayjs.extend(relativeTime);
 
 const defaultFormValues: CertificateFormValues = {
   name: '',
@@ -39,42 +39,67 @@ const defaultFormValues: CertificateFormValues = {
   status: 'active',
   alertModelId: undefined,
   notes: '',
-  telegramChatId: '',
-  channels: {
-    email: true,
-    slack: false,
-    telegram: false,
-    googlechat: false
-  }
+  channelIds: []
 };
 
-const channelLabels: Record<Channel, string> = {
-  email: 'E-mail',
-  slack: 'Slack',
-  telegram: 'Telegram',
-  googlechat: 'Google Chat'
+const statusLabels: Record<string, string> = {
+  active: 'Ativo',
+  expired: 'Expirado',
+  revoked: 'Revogado'
 };
 
 const CertificatesPage: React.FC = () => {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [alertModels, setAlertModels] = useState<AlertModel[]>([]);
+  const [channelSummaries, setChannelSummaries] = useState<ChannelSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const { notify } = useToast();
 
-  const { register, handleSubmit, reset, watch, setValue, formState } = useForm<CertificateFormValues>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors }
+  } = useForm<CertificateFormValues>({
     defaultValues: defaultFormValues
   });
 
-  const selectedChannels = watch('channels');
+  useEffect(() => {
+    register('channelIds');
+  }, [register]);
+
+  const selectedChannelIds = watch('channelIds');
+
+  const channelMap = useMemo(() => {
+    const map: Record<string, ChannelSummary> = {};
+    channelSummaries.forEach((summary) => {
+      map[summary.channel.id] = summary;
+    });
+    return map;
+  }, [channelSummaries]);
+
+  const activeChannels = useMemo(
+    () => channelSummaries.filter((summary) => summary.channel.enabled),
+    [channelSummaries]
+  );
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [certs, models] = await Promise.all([listCertificates(), listAlertModels()]);
+      const [certs, models, channels] = await Promise.all([
+        listCertificates(),
+        listAlertModels(),
+        listChannels()
+      ]);
       setCertificates(certs);
       setAlertModels(models);
+      setChannelSummaries(channels);
+    } catch (error) {
+      notify({ type: 'error', title: 'Falha ao carregar dados' });
     } finally {
       setLoading(false);
     }
@@ -99,13 +124,7 @@ const CertificatesPage: React.FC = () => {
       status: certificate.status,
       alertModelId: certificate.alertModelId,
       notes: certificate.notes,
-      telegramChatId: certificate.telegramChatId,
-      channels: {
-        email: certificate.channels.includes('email'),
-        slack: certificate.channels.includes('slack'),
-        telegram: certificate.channels.includes('telegram'),
-        googlechat: certificate.channels.includes('googlechat')
-      }
+      channelIds: certificate.channelIds
     });
     setSelectedCertificate(certificate);
     setModalOpen(true);
@@ -121,8 +140,7 @@ const CertificatesPage: React.FC = () => {
         status: values.status,
         alertModelId: values.alertModelId,
         notes: values.notes,
-        telegramChatId: values.telegramChatId,
-        channels: (Object.keys(values.channels) as Channel[]).filter((channel) => values.channels[channel])
+        channelIds: values.channelIds
       };
 
       if (selectedCertificate) {
@@ -132,15 +150,16 @@ const CertificatesPage: React.FC = () => {
         await createCertificate(payload);
         notify({ type: 'success', title: 'Certificado criado' });
       }
+
       setModalOpen(false);
       await fetchData();
     } catch (error) {
-      notify({ type: 'error', title: 'Erro ao salvar certificado', description: 'Tente novamente mais tarde.' });
+      notify({ type: 'error', title: 'Erro ao salvar certificado' });
     }
   });
 
   const handleDelete = async (certificate: Certificate) => {
-    if (!confirm(`Deseja remover ${certificate.name}?`)) {
+    if (!window.confirm(`Deseja remover ${certificate.name}?`)) {
       return;
     }
     try {
@@ -161,10 +180,18 @@ const CertificatesPage: React.FC = () => {
     }
   };
 
-  const sortedCertificates = useMemo(
-    () => [...certificates].sort((a, b) => dayjs(a.expiresAt).diff(dayjs(b.expiresAt))),
-    [certificates]
-  );
+  const toggleChannel = (channelId: string) => {
+    const current = selectedChannelIds || [];
+    if (current.includes(channelId)) {
+      setValue(
+        'channelIds',
+        current.filter((id) => id !== channelId),
+        { shouldDirty: true }
+      );
+    } else {
+      setValue('channelIds', [...current, channelId], { shouldDirty: true });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -172,7 +199,7 @@ const CertificatesPage: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Certificados</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cadastre certificados, defina canais de alerta e vincule modelos.
+            Cadastre certificados, defina canais e vincule modelos de alerta.
           </p>
         </div>
         <button
@@ -203,50 +230,71 @@ const CertificatesPage: React.FC = () => {
                   Carregando...
                 </td>
               </tr>
-            ) : sortedCertificates.length === 0 ? (
+            ) : certificates.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-center text-slate-500 dark:text-slate-400" colSpan={5}>
                   Nenhum certificado cadastrado.
                 </td>
               </tr>
             ) : (
-              sortedCertificates.map((certificate) => (
-                <tr key={certificate.id}>
-                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{certificate.name}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{certificate.ownerEmail}</td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {dayjs(certificate.expiresAt).format('DD/MM/YYYY')} ({dayjs(certificate.expiresAt).fromNow()})
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                    {certificate.channels.length ? certificate.channels.join(', ') : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openModalForEdit(certificate)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleTestNotification(certificate)}
-                        className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
-                      >
-                        <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(certificate)}
-                        className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      >
-                        <TrashIcon className="mr-1 h-4 w-4" /> Remover
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              certificates.map((certificate) => {
+                const daysLeft = dayjs(certificate.expiresAt).diff(dayjs(), 'day');
+                const channelLabels = certificate.channelIds
+                  .map((id) => channelMap[id]?.channel.name)
+                  .filter(Boolean);
+
+                return (
+                  <tr key={certificate.id}>
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">{certificate.name}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{certificate.ownerEmail}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {dayjs(certificate.expiresAt).format('DD/MM/YYYY')} ({dayjs(certificate.expiresAt).fromNow()})
+                    </td>
+                    <td className="px-4 py-3">
+                      {channelLabels.length ? (
+                        <div className="flex flex-wrap gap-1">
+                          {channelLabels.map((label) => (
+                            <span
+                              key={label}
+                              className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                            >
+                              <TagIcon className="h-3 w-3" />
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 dark:text-slate-400">Nenhum canal</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(certificate)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTestNotification(certificate)}
+                          className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
+                        >
+                          <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(certificate)}
+                          className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                        >
+                          <TrashIcon className="mr-1 h-4 w-4" /> Remover
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -289,9 +337,7 @@ const CertificatesPage: React.FC = () => {
                           className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                           {...register('name', { required: 'Informe o nome' })}
                         />
-                        {formState.errors.name ? (
-                          <span className="mt-1 block text-xs text-rose-500">{formState.errors.name.message}</span>
-                        ) : null}
+                        {errors.name && <span className="mt-1 block text-xs text-rose-500">{errors.name.message}</span>}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">E-mail do responsável</label>
@@ -300,6 +346,9 @@ const CertificatesPage: React.FC = () => {
                           className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                           {...register('ownerEmail', { required: 'Informe o e-mail' })}
                         />
+                        {errors.ownerEmail && (
+                          <span className="mt-1 block text-xs text-rose-500">{errors.ownerEmail.message}</span>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Data de emissão</label>
@@ -348,41 +397,44 @@ const CertificatesPage: React.FC = () => {
                     </div>
 
                     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Canais de notificação</h3>
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        {(Object.keys(channelLabels) as Channel[]).map((channel) => (
-                          <label key={channel} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
-                            <span>{channelLabels[channel]}</span>
-                            <Switch
-                              checked={selectedChannels[channel]}
-                              onChange={(checked) => setValue(`channels.${channel}`, checked)}
-                              className={clsx(
-                                selectedChannels[channel] ? 'bg-primary-600' : 'bg-slate-200 dark:bg-slate-700',
-                                'relative inline-flex h-5 w-10 items-center rounded-full transition'
-                              )}
-                            >
-                              <span
+                      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Canais vinculados</h3>
+                      {activeChannels.length === 0 ? (
+                        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                          Nenhuma instância de canal ativa cadastrada.
+                        </p>
+                      ) : (
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          {activeChannels.map((summary) => {
+                            const isChecked = selectedChannelIds?.includes(summary.channel.id) ?? false;
+                            return (
+                              <label
+                                key={summary.channel.id}
                                 className={clsx(
-                                  selectedChannels[channel] ? 'translate-x-5' : 'translate-x-1',
-                                  'inline-block h-3 w-3 transform rounded-full bg-white transition'
+                                  'flex items-start justify-between rounded-lg border px-3 py-2 text-sm transition',
+                                  isChecked
+                                    ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:border-primary-500/70 dark:text-primary-200'
+                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
                                 )}
-                              />
-                            </Switch>
-                          </label>
-                        ))}
-                      </div>
-
-                      {selectedChannels.telegram ? (
-                        <div className="mt-4">
-                          <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Telegram chat ID
-                          </label>
-                          <input
-                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                            {...register('telegramChatId', { required: selectedChannels.telegram })}
-                          />
+                              >
+                                <span>
+                                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                                    {summary.channel.name}
+                                  </span>
+                                  <span className="block text-xs capitalize text-slate-500 dark:text-slate-400">
+                                    {summary.channel.type.replace('_', ' ')}
+                                  </span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                                  checked={isChecked}
+                                  onChange={() => toggleChannel(summary.channel.id)}
+                                />
+                              </label>
+                            );
+                          })}
                         </div>
-                      ) : null}
+                      )}
                     </div>
 
                     <div>

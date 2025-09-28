@@ -7,12 +7,14 @@ export const listCertificates = async (): Promise<Certificate[]> => {
 };
 
 export const createCertificate = async (payload: Partial<Certificate>): Promise<Certificate> => {
-  const { data } = await api.post<Certificate>('/certificates', payload);
+  const body = { ...payload, channelIds: payload.channelIds ?? [] };
+  const { data } = await api.post<Certificate>('/certificates', body);
   return data;
 };
 
 export const updateCertificate = async (id: string, payload: Partial<Certificate>): Promise<Certificate> => {
-  const { data } = await api.put<Certificate>(`/certificates/${id}`, payload);
+  const body = { ...payload, channelIds: payload.channelIds ?? [] };
+  const { data } = await api.put<Certificate>(`/certificates/${id}`, body);
   return data;
 };
 

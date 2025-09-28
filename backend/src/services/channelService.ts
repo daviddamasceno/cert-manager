@@ -62,19 +62,10 @@ export class ChannelService {
     for (const channel of channels) {
       const params = await this.repository.getChannelParams(channel.id);
       const secrets = await this.repository.getChannelSecrets(channel.id);
-      const paramMap: Record<string, string> = {};
-      params.forEach((param) => {
-        paramMap[param.key] = param.value;
-      });
-      const secretSummaries: ChannelSecretSummary[] = secrets.map((secret) => ({
-        key: secret.key,
-        hasValue: Boolean(secret.valueCiphertext)
-      }));
-
       responses.push({
         channel,
-        params: paramMap,
-        secrets: secretSummaries
+        params: this.composeParamMap(channel.type, params),
+        secrets: this.composeSecretSummaries(channel.type, secrets)
       });
     }
 
@@ -86,6 +77,10 @@ export class ChannelService {
     const id = uuid();
     const timestamp = nowIso();
     const type = input.type;
+    const definition = CHANNEL_DEFINITIONS[type];
+    if (!definition) {
+      throw new Error(`Unsupported channel type: ${type}`);
+    }
 
     const instance: ChannelInstance = {
       id,
@@ -114,8 +109,8 @@ export class ChannelService {
 
     return {
       channel: instance,
-      params: Object.fromEntries(params.map((p) => [p.key, p.value])),
-      secrets: CHANNEL_DEFINITIONS[type].secrets.map((key) => ({ key, hasValue: Boolean(input.secrets?.[key]) }))
+      params: this.composeParamMap(type, params),
+      secrets: this.composeSecretSummaries(type, secrets, input.secrets)
     };
   }
 
@@ -129,10 +124,16 @@ export class ChannelService {
       throw new Error('Channel not found');
     }
 
+    const newType = input.type ?? existing.type;
+    const definition = CHANNEL_DEFINITIONS[newType];
+    if (!definition) {
+      throw new Error(`Unsupported channel type: ${newType}`);
+    }
+
     const channel: ChannelInstance = {
       ...existing,
       name: input.name ?? existing.name,
-      type: input.type ?? existing.type,
+      type: newType,
       enabled: input.enabled !== undefined ? input.enabled : existing.enabled,
       updatedAt: nowIso()
     };
@@ -150,22 +151,29 @@ export class ChannelService {
     );
 
     await this.repository.updateChannel(channel, params, secrets);
+    const diff: Record<string, { old?: unknown; new?: unknown }> = {};
+    if (input.name) {
+      diff.name = { old: existing.name, new: input.name };
+    }
+    if (input.enabled !== undefined) {
+      diff.enabled = { old: existing.enabled, new: input.enabled };
+    }
+    if (input.type && input.type !== existing.type) {
+      diff.type = { old: existing.type, new: input.type };
+    }
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
       entity: 'channel',
       entityId: id,
       action: 'update',
-      diff: {
-        name: input.name ? { old: existing.name, new: input.name } : undefined,
-        enabled: input.enabled !== undefined ? { old: existing.enabled, new: input.enabled } : undefined
-      }
+      diff
     });
 
     return {
       channel,
-      params: Object.fromEntries(params.map((p) => [p.key, p.value])),
-      secrets: secrets.map((secret) => ({ key: secret.key, hasValue: Boolean(secret.valueCiphertext) }))
+      params: this.composeParamMap(channel.type, params),
+      secrets: this.composeSecretSummaries(channel.type, secrets, input.secrets)
     };
   }
 
@@ -192,9 +200,8 @@ export class ChannelService {
     const currentMap = new Map(existing.map((param) => [param.key, param.value]));
 
     definition.params.forEach((key) => {
-      if (incoming[key] !== undefined) {
-        currentMap.set(key, String(incoming[key]));
-      }
+      const value = incoming[key] ?? currentMap.get(key) ?? '';
+      currentMap.set(key, String(value));
     });
 
     return Array.from(currentMap.entries()).map(([key, value]) => ({
@@ -232,6 +239,33 @@ export class ChannelService {
       key,
       valueCiphertext,
       updatedAt: timestamp
+    }));
+  }
+
+  private composeParamMap(type: ChannelType, params: ChannelParam[]): Record<string, string> {
+    const definition = CHANNEL_DEFINITIONS[type];
+    const map = new Map(params.map((param) => [param.key, param.value]));
+    definition.params.forEach((key) => {
+      if (!map.has(key)) {
+        map.set(key, '');
+      }
+    });
+    return Object.fromEntries(map.entries());
+  }
+
+  private composeSecretSummaries(
+    type: ChannelType,
+    secrets: ChannelSecret[],
+    provided?: Record<string, string | null | undefined>
+  ): ChannelSecretSummary[] {
+    const definition = CHANNEL_DEFINITIONS[type];
+    const stored = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
+    return definition.secrets.map((key) => ({
+      key,
+      hasValue:
+        provided && Object.prototype.hasOwnProperty.call(provided, key)
+          ? Boolean(provided[key])
+          : stored.has(key)
     }));
   }
 }

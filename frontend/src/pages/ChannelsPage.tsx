@@ -80,6 +80,10 @@ const ChannelsPage: React.FC = () => {
     defaultValues
   });
 
+  useEffect(() => {
+    register('enabled');
+  }, [register]);
+
   const selectedType = watch('type');
   const enabled = watch('enabled');
 
@@ -159,7 +163,7 @@ const ChannelsPage: React.FC = () => {
       if (channel.channel.enabled) {
         await disableChannel(channel.channel.id);
       } else {
-        await updateChannel(channel.channel.id, { enabled: true, name: channel.channel.name, type: channel.channel.type });
+        await updateChannel(channel.channel.id, { enabled: true });
       }
       notify({ type: 'success', title: 'Status atualizado' });
       await fetchChannels();

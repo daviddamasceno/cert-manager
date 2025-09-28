@@ -161,7 +161,7 @@ const DashboardPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {certificate.channels.length ? certificate.channels.join(', ') : '—'}
+                        {certificate.channelIds.length ? `${certificate.channelIds.length} canais` : '—'}
                       </td>
                     </tr>
                   );

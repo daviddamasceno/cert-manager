@@ -1,4 +1,4 @@
-﻿import { google } from 'googleapis';
+﻿import { google, sheets_v4 } from 'googleapis';
 import config from '../src/config/env';
 import logger from '../src/utils/logger';
 import { withRetry } from '../src/utils/retry';
@@ -44,10 +44,10 @@ const HEADERS: HeaderMap = {
   ]
 };
 
-type SheetsAuth = ReturnType<typeof google.auth.JWT>;
+type SheetsClient = sheets_v4.Sheets;
 
 async function ensureSheet(
-  sheets: ReturnType<typeof google.sheets>,
+  sheets: SheetsClient,
   spreadsheetId: string,
   tab: string,
   header: string[]
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
   });
 
-  const sheets = google.sheets({ version: 'v4', auth });
+  const sheets: SheetsClient = google.sheets({ version: 'v4', auth });
 
   for (const [tab, header] of Object.entries(HEADERS)) {
     await ensureSheet(sheets, config.googleSheetsId, tab, header);

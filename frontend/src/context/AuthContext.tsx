@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, attachAuthInterceptor, setAccessToken as applyAccessToken } from '../services/apiClient';
 
 type User = {
+  id: string;
   email: string;
 };
 
@@ -25,7 +26,7 @@ const STORAGE_KEY = 'cert-manager-auth';
 const decodeToken = (token: string): User | null => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return { email: payload.email };
+    return { id: payload.sub || payload.email, email: payload.email };
   } catch (error) {
     console.error('Erro ao decodificar token', error);
     return null;
