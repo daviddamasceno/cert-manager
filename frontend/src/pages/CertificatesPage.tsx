@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { ChangeEvent, Fragment, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   listCertificates,
@@ -9,9 +9,8 @@ import {
 } from '../services/certificates';
 import { listAlertModels } from '../services/alertModels';
 import { listChannels } from '../services/channels';
-import { AlertModel, Certificate, ChannelSummary } from '../types';
+import { AlertModel, Certificate, ChannelSummary, ChannelType } from '../types';
 import { Dialog, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
 import { PlusIcon, PencilSquareIcon, TrashIcon, PaperAirplaneIcon, TagIcon } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -48,6 +47,13 @@ const statusLabels: Record<string, string> = {
   revoked: 'Revogado'
 };
 
+const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
+  email_smtp: 'SMTP',
+  telegram_bot: 'Telegram',
+  slack_webhook: 'Slack',
+  googlechat_webhook: 'Google Chat'
+};
+
 const CertificatesPage: React.FC = () => {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [alertModels, setAlertModels] = useState<AlertModel[]>([]);
@@ -68,11 +74,9 @@ const CertificatesPage: React.FC = () => {
     defaultValues: defaultFormValues
   });
 
-  useEffect(() => {
-    register('channelIds');
-  }, [register]);
+  const { ref: channelIdsRef } = register('channelIds');
 
-  const selectedChannelIds = watch('channelIds');
+  const selectedChannelIds = watch('channelIds') ?? [];
 
   const channelMap = useMemo(() => {
     const map: Record<string, ChannelSummary> = {};
@@ -86,6 +90,18 @@ const CertificatesPage: React.FC = () => {
     () => channelSummaries.filter((summary) => summary.channel.enabled),
     [channelSummaries]
   );
+
+  const groupedChannels = useMemo(() => {
+    const groups = new Map<ChannelType, ChannelSummary[]>();
+    activeChannels.forEach((summary) => {
+      const current = groups.get(summary.channel.type) ?? [];
+      current.push(summary);
+      groups.set(summary.channel.type, current);
+    });
+    return groups;
+  }, [activeChannels]);
+
+  const channelSelectSize = Math.min(8, Math.max(3, activeChannels.length));
 
   const fetchData = async () => {
     setLoading(true);
@@ -180,17 +196,9 @@ const CertificatesPage: React.FC = () => {
     }
   };
 
-  const toggleChannel = (channelId: string) => {
-    const current = selectedChannelIds || [];
-    if (current.includes(channelId)) {
-      setValue(
-        'channelIds',
-        current.filter((id) => id !== channelId),
-        { shouldDirty: true }
-      );
-    } else {
-      setValue('channelIds', [...current, channelId], { shouldDirty: true });
-    }
+  const handleChannelSelect = (event: ChangeEvent<HTMLSelectElement>) => {
+    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setValue('channelIds', selected, { shouldDirty: true });
   };
 
   return (
@@ -403,36 +411,42 @@ const CertificatesPage: React.FC = () => {
                           Nenhuma instância de canal ativa cadastrada.
                         </p>
                       ) : (
-                        <div className="mt-3 grid gap-3 md:grid-cols-2">
-                          {activeChannels.map((summary) => {
-                            const isChecked = selectedChannelIds?.includes(summary.channel.id) ?? false;
-                            return (
-                              <label
-                                key={summary.channel.id}
-                                className={clsx(
-                                  'flex items-start justify-between rounded-lg border px-3 py-2 text-sm transition',
-                                  isChecked
-                                    ? 'border-primary-500 bg-primary-500/10 text-primary-700 dark:border-primary-500/70 dark:text-primary-200'
-                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                                )}
-                              >
-                                <span>
-                                  <span className="font-medium text-slate-700 dark:text-slate-200">
-                                    {summary.channel.name}
-                                  </span>
-                                  <span className="block text-xs capitalize text-slate-500 dark:text-slate-400">
-                                    {summary.channel.type.replace('_', ' ')}
-                                  </span>
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                                  checked={isChecked}
-                                  onChange={() => toggleChannel(summary.channel.id)}
-                                />
-                              </label>
-                            );
-                          })}
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Selecione uma ou mais instâncias ativas. Os canais estão agrupados pelo tipo configurado.
+                          </p>
+                          <select
+                            multiple
+                            ref={channelIdsRef}
+                            value={selectedChannelIds}
+                            onChange={handleChannelSelect}
+                            size={channelSelectSize}
+                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            {(Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[]).map((type) => {
+                              const group = groupedChannels.get(type);
+                              if (!group || group.length === 0) {
+                                return null;
+                              }
+                              return (
+                                <optgroup key={type} label={CHANNEL_TYPE_LABELS[type]}>
+                                  {group.map((summary) => (
+                                    <option key={summary.channel.id} value={summary.channel.id}>
+                                      {summary.channel.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              );
+                            })}
+                          </select>
+                          {selectedChannelIds.length > 0 ? (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Selecionados:{' '}
+                              {selectedChannelIds
+                                .map((id) => channelMap[id]?.channel.name || id)
+                                .join(', ')}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </div>

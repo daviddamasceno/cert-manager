@@ -1,4 +1,4 @@
-﻿import { v4 as uuid } from 'uuid';
+import { v4 as uuid } from 'uuid';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
 import {
@@ -44,6 +44,24 @@ export interface ChannelResponse {
 export interface ChannelTestResult {
   success: boolean;
   error?: string;
+}
+
+export interface ChannelNotificationPayload {
+  subject?: string;
+  message: string;
+  email?: {
+    to: string[];
+  };
+}
+
+export interface ChannelNotificationMetadata {
+  certificateId?: string;
+  certificateName?: string;
+}
+
+export interface ChannelNotificationResult {
+  channel: ChannelInstance;
+  destination: string;
 }
 
 export interface ChannelInput {
@@ -220,28 +238,16 @@ export class ChannelService {
     let destinationDescription = '';
 
     try {
-      switch (channel.type) {
-        case 'email_smtp': {
-          const to = this.extractEmailRecipient(input);
-          destinationDescription = `email ${to}`;
-          await this.sendSmtpTest(channel, params, secrets, to);
-          break;
-        }
-        case 'telegram_bot': {
-          destinationDescription = await this.sendTelegramTest(channel, paramMap, secretMap);
-          break;
-        }
-        case 'slack_webhook': {
-          destinationDescription = await this.sendSlackTest(channel, paramMap, secretMap);
-          break;
-        }
-        case 'googlechat_webhook': {
-          destinationDescription = await this.sendGoogleChatTest(channel, paramMap, secretMap);
-          break;
-        }
-        default:
-          throw new Error('Channel type does not support test operation yet');
-      }
+      const payload: ChannelNotificationPayload =
+        channel.type === 'email_smtp'
+          ? {
+              subject: 'Teste de SMTP',
+              message: 'Teste de SMTP realizado com sucesso pelo Cert Manager.',
+              email: { to: [this.extractEmailRecipient(input)] }
+            }
+          : { message: `Teste de integracao: ${channel.name}` };
+
+      destinationDescription = await this.deliverMessage(channel, paramMap, secretMap, payload);
 
       await this.auditService.record({
         actorUserId: actor.id,
@@ -268,20 +274,174 @@ export class ChannelService {
     }
   }
 
+  async notifyChannel(
+    id: string,
+    payload: ChannelNotificationPayload,
+    actor: { id: string; email: string },
+    metadata?: ChannelNotificationMetadata
+  ): Promise<ChannelNotificationResult> {
+    const channel = await this.repository.getChannel(id);
+    if (!channel) {
+      throw new Error('Channel not found');
+    }
+
+    if (!channel.enabled) {
+      throw new Error('Channel disabled');
+    }
+
+    const [params, secrets] = await Promise.all([
+      this.repository.getChannelParams(id),
+      this.repository.getChannelSecrets(id)
+    ]);
+
+    const paramMap = this.composeParamMap(channel.type, params);
+    const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
+
+    try {
+      const destination = await this.deliverMessage(channel, paramMap, secretMap, payload);
+      await this.recordNotificationAudit(channel, actor, destination, metadata);
+      return { channel, destination };
+    } catch (error) {
+      const message = this.extractErrorMessage(error);
+      await this.recordNotificationAudit(channel, actor, undefined, metadata, message);
+      throw new Error(message);
+    }
+  }
+
+  private async deliverMessage(
+    channel: ChannelInstance,
+    paramMap: Record<string, string>,
+    secretMap: Map<string, string>,
+    payload: ChannelNotificationPayload
+  ): Promise<string> {
+    const message = payload.message?.trim();
+    if (!message) {
+      throw new Error('Mensagem do canal nao pode ser vazia');
+    }
+
+    switch (channel.type) {
+      case 'email_smtp': {
+        const recipients =
+          payload.email?.to?.map((email) => email.trim()).filter((email) => email.length > 0) ?? [];
+        if (!recipients.length) {
+          throw new Error('Nenhum destinatario de email informado');
+        }
+        const subject = payload.subject?.trim() || `Alerta: ${channel.name}`;
+        await this.sendEmailMessage(channel, paramMap, secretMap, {
+          to: recipients,
+          subject,
+          text: message
+        });
+        return `email ${recipients.join(', ')}`;
+      }
+      case 'telegram_bot':
+        return await this.sendTelegramMessage(channel, paramMap, secretMap, message);
+      case 'slack_webhook':
+        return await this.sendSlackMessage(channel, paramMap, secretMap, message);
+      case 'googlechat_webhook':
+        return await this.sendGoogleChatMessage(channel, paramMap, secretMap, message);
+      default:
+        throw new Error(`Unsupported channel type: ${channel.type}`);
+    }
+  }
+
+  private async recordNotificationAudit(
+    channel: ChannelInstance,
+    actor: { id: string; email: string },
+    destination: string | undefined,
+    metadata: ChannelNotificationMetadata | undefined,
+    errorMessage?: string
+  ): Promise<void> {
+    const parts: string[] = [];
+    if (errorMessage) {
+      parts.push(
+        `${channel.type} notification failed${destination ? ` for ${destination}` : ''}: ${errorMessage}`
+      );
+    } else {
+      parts.push(`${channel.type} notification sent to ${destination ?? 'destino desconhecido'}`);
+    }
+    if (metadata?.certificateName) {
+      parts.push(`certificate=${metadata.certificateName}`);
+    }
+    if (metadata?.certificateId) {
+      parts.push(`certificate_id=${metadata.certificateId}`);
+    }
+
+    await this.auditService.record({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      entity: 'channel',
+      entityId: channel.id,
+      action: 'notification_sent',
+      diff: {},
+      note: parts.join(' | ')
+    });
+  }
+
   private extractEmailRecipient(input: Record<string, unknown>): string {
     const toRaw = [input['to'], input['to_email']]
       .map((value) => (typeof value === 'string' ? value.trim() : ''))
       .find((value) => value.length > 0);
     if (!toRaw) {
-      throw new Error('Parâmetro to_email obrigatório');
+      throw new Error('Parametro to_email obrigatorio');
     }
     return toRaw;
   }
 
-  private async sendTelegramTest(
+  private async sendEmailMessage(
     channel: ChannelInstance,
     paramMap: Record<string, string>,
-    secretMap: Map<string, string>
+    secretMap: Map<string, string>,
+    options: { to: string[]; subject: string; text: string }
+  ): Promise<void> {
+    const host = this.sanitize(paramMap['smtp_host']);
+    const port = this.parsePositiveNumber(paramMap['smtp_port'], 587);
+    const user = this.sanitize(paramMap['smtp_user']);
+    const fromName = this.sanitize(paramMap['from_name']) || channel.name || 'Cert Manager';
+    const fromEmail = this.sanitize(paramMap['from_email']) || user;
+    const tlsFlag = this.sanitize(paramMap['tls']).toLowerCase();
+    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
+    const encryptedPass = secretMap.get('smtp_pass');
+    const pass = encryptedPass ? decryptSecret(encryptedPass) : undefined;
+
+    if (!host) {
+      throw new Error('Configuracao SMTP ausente: host obrigatorio');
+    }
+    if (!port) {
+      throw new Error('Configuracao SMTP ausente ou invalida: porta');
+    }
+    if (!fromEmail) {
+      throw new Error('Configuracao SMTP ausente: from_email obrigatorio');
+    }
+
+    const useTls = tlsFlag === 'on';
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: useTls || port === 465,
+      requireTLS: useTls,
+      auth: user ? { user, pass } : undefined,
+      connectionTimeout: timeout,
+      greetingTimeout: timeout,
+      socketTimeout: timeout
+    });
+
+    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+
+    await transporter.sendMail({
+      from,
+      to: options.to.join(', '),
+      subject: options.subject,
+      text: options.text
+    });
+  }
+
+  private async sendTelegramMessage(
+    channel: ChannelInstance,
+    paramMap: Record<string, string>,
+    secretMap: Map<string, string>,
+    message: string
   ): Promise<string> {
     const chatIds = paramMap['chat_ids']
       .split(',')
@@ -293,12 +453,11 @@ export class ChannelService {
 
     const tokenCipher = secretMap.get('bot_token');
     if (!tokenCipher) {
-      throw new Error('Token do bot não configurado.');
+      throw new Error('Token do bot nao configurado.');
     }
     const token = decryptSecret(tokenCipher);
 
     const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
-    const message = `Teste de integração: ${channel.name}`;
     const baseUrl = `https://api.telegram.org/bot${token}`;
 
     for (const chatId of chatIds) {
@@ -318,22 +477,21 @@ export class ChannelService {
     return `Telegram chats: ${chatIds.join(', ')}`;
   }
 
-  private async sendSlackTest(
+  private async sendSlackMessage(
     channel: ChannelInstance,
     paramMap: Record<string, string>,
-    secretMap: Map<string, string>
+    secretMap: Map<string, string>,
+    message: string
   ): Promise<string> {
     const webhookCipher = secretMap.get('webhook_url');
     if (!webhookCipher) {
-      throw new Error('Webhook URL não configurado.');
+      throw new Error('Webhook URL nao configurado.');
     }
     const webhookUrl = decryptSecret(webhookCipher);
     const channelOverride = paramMap['channel_override']?.trim();
     const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
 
-    const payload: Record<string, unknown> = {
-      text: `Teste de integração: ${channel.name}`
-    };
+    const payload: Record<string, unknown> = { text: message };
     if (channelOverride) {
       payload.channel = channelOverride;
     }
@@ -353,14 +511,15 @@ export class ChannelService {
       : 'Slack default webhook destination';
   }
 
-  private async sendGoogleChatTest(
+  private async sendGoogleChatMessage(
     channel: ChannelInstance,
     paramMap: Record<string, string>,
-    secretMap: Map<string, string>
+    secretMap: Map<string, string>,
+    message: string
   ): Promise<string> {
     const webhookCipher = secretMap.get('webhook_url');
     if (!webhookCipher) {
-      throw new Error('Webhook do Google Chat não configurado.');
+      throw new Error('Webhook do Google Chat nao configurado.');
     }
     const webhookUrl = decryptSecret(webhookCipher);
     const spaceName = paramMap['space_name']?.trim();
@@ -369,12 +528,12 @@ export class ChannelService {
     await this.executeWithRetry(async () => {
       await axios.post(
         webhookUrl,
-        { text: `Teste de integração: ${channel.name}` },
+        { text: message },
         { timeout, headers: { 'Content-Type': 'application/json' } }
       );
     });
 
-    return spaceName ? `Google Chat space ${spaceName}` : 'Google Chat webhook padrão';
+    return spaceName ? `Google Chat space ${spaceName}` : 'Google Chat webhook padrao';
   }
 
   private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -421,13 +580,17 @@ export class ChannelService {
           }
         }
       }
-      if (error.code === 'ECONNABORTED') {
-        return 'Tempo limite excedido ao contatar o serviço externo';
+      if ((error as { code?: string }).code === 'ECONNABORTED') {
+        return 'Tempo limite excedido ao contatar o servico externo';
       }
       return error.message;
     }
     return error instanceof Error ? error.message : String(error);
   }
+
+
+
+
 
   private async buildParams(
     type: ChannelType,
@@ -507,58 +670,6 @@ export class ChannelService {
           ? Boolean(provided[key])
           : stored.has(key)
     }));
-  }
-
-  private async sendSmtpTest(
-    channel: ChannelInstance,
-    params: ChannelParam[],
-    secrets: ChannelSecret[],
-    to: string
-  ): Promise<void> {
-    const paramMap = this.composeParamMap(channel.type, params);
-    const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
-
-    const host = this.sanitize(paramMap['smtp_host']);
-    const port = this.parsePositiveNumber(paramMap['smtp_port'], 587);
-    const user = this.sanitize(paramMap['smtp_user']);
-    const fromName = this.sanitize(paramMap['from_name']) || 'Cert Manager';
-    const fromEmail = this.sanitize(paramMap['from_email']) || user;
-    const tlsFlag = this.sanitize(paramMap['tls']).toLowerCase();
-    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
-    const encryptedPass = secretMap.get('smtp_pass');
-    const pass = encryptedPass ? decryptSecret(encryptedPass) : undefined;
-
-    if (!host) {
-      throw new Error('Configuração SMTP ausente: host obrigatório');
-    }
-    if (!port) {
-      throw new Error('Configuração SMTP ausente ou inválida: porta');
-    }
-    if (!fromEmail) {
-      throw new Error('Configuração SMTP ausente: from_email obrigatório');
-    }
-
-    const useTls = tlsFlag === 'on';
-
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: useTls || port === 465,
-      requireTLS: useTls,
-      auth: user ? { user, pass } : undefined,
-      connectionTimeout: timeout,
-      greetingTimeout: timeout,
-      socketTimeout: timeout
-    });
-
-    const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-
-    await transporter.sendMail({
-      from,
-      to,
-      subject: 'Teste de SMTP',
-      text: 'Teste de SMTP realizado com sucesso pelo Cert Manager.'
-    });
   }
 
   private sanitize(value: string | undefined): string {

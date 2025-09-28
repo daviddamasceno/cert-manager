@@ -44,7 +44,15 @@ export class AlertSchedulerJob {
 
       const shouldSend = this.shouldSendNotification(daysLeft, model);
       if (shouldSend) {
-        await this.notificationService.sendAlerts(certificate, model, daysLeft);
+        try {
+          await this.notificationService.sendAlerts(certificate, model, daysLeft, {
+            id: 'system',
+            email: 'system@local'
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error({ certificate: certificate.id, error: message }, 'Failed to send scheduled notification');
+        }
       }
     }
   }

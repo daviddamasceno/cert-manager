@@ -11,7 +11,7 @@ export const auditService = new AuditService(sheetsRepository);
 export const channelService = new ChannelService(sheetsRepository, auditService);
 export const certificateService = new CertificateService(sheetsRepository, auditService);
 export const alertModelService = new AlertModelService(sheetsRepository);
-export const notificationService = new NotificationService(auditService);
+export const notificationService = new NotificationService(auditService, channelService);
 
 export const initializeServices = (): void => {
   // reserved for future initialisation (plugins, caches, etc.)

@@ -108,7 +108,13 @@ certificateController.post('/:id/test-notification', async (req, res) => {
 
   const daysLeft = Math.floor(parseDate(certificate.expiresAt).diff(now(), 'days').days);
 
-  await notificationService.sendAlerts(certificate, alertModel, daysLeft);
+  const actor = (req as AuthenticatedRequest).user ?? { id: 'system', email: 'system@local' };
 
-  res.json({ message: 'Notificação de teste enviada' });
+  try {
+    await notificationService.sendAlerts(certificate, alertModel, daysLeft, actor);
+    res.json({ message: 'Notificação de teste enviada' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao enviar notificações';
+    res.status(500).json({ message });
+  }
 });
