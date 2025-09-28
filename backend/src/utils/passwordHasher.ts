@@ -1,5 +1,5 @@
 import argon2, { argon2id } from 'argon2';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 import config from '../config/env';
 
 export const hashSecret = async (secret: string): Promise<string> => {

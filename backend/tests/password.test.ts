@@ -7,6 +7,7 @@ process.env.PASSWORD_MIN_LENGTH = '10';
 process.env.ARGON2_TIME = '2';
 process.env.ARGON2_MEMORY = '4096';
 process.env.ARGON2_THREADS = '2';
+process.env.BCRYPT_COST = process.env.BCRYPT_COST || '12';
 process.env.LOGIN_MAX_ATTEMPTS = '5';
 process.env.LOGIN_LOCK_MINUTES = '15';
 process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 = Buffer.from('{}').toString('base64');
@@ -17,6 +18,7 @@ import assert from 'assert';
 
 (async () => {
   const { hashSecret, verifySecret } = await import('../src/utils/passwordHasher');
+  const { default: config } = await import('../src/config/env');
 
   const password = 'strong-password-value';
   const hash = await hashSecret(password);
@@ -27,6 +29,22 @@ import assert from 'assert';
 
   const invalid = await verifySecret('wrong-password', hash);
   assert.strictEqual(invalid, false, 'Hash verification should fail for different password');
+
+  config.password.hasher = 'bcrypt';
+
+  const bcryptPassword = 'another-strong-password';
+  const bcryptHash = await hashSecret(bcryptPassword);
+  assert.notStrictEqual(
+    bcryptHash,
+    bcryptPassword,
+    'Bcrypt hash should not match original password'
+  );
+
+  const bcryptValid = await verifySecret(bcryptPassword, bcryptHash);
+  assert.strictEqual(bcryptValid, true, 'Bcrypt hash verification should succeed');
+
+  const bcryptInvalid = await verifySecret('wrong-pass', bcryptHash);
+  assert.strictEqual(bcryptInvalid, false, 'Bcrypt hash verification should fail');
 
   console.log('password.test.ts passed');
 })();
