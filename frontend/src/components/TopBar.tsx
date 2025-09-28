@@ -9,7 +9,7 @@ const TopBar: React.FC = () => {
   return (
     <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-900">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Gest?o de Certificados</h1>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Gestão de Certificados</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">Monitoramento ativo e alertas inteligentes</p>
       </div>
       <div className="flex items-center space-x-4">

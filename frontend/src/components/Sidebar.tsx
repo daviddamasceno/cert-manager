@@ -14,7 +14,7 @@ const navigation = [
   { name: 'Modelos de alerta', to: '/alert-models', icon: BellAlertIcon },
   { name: 'Canais', to: '/channels', icon: AdjustmentsHorizontalIcon },
   { name: 'Logs de auditoria', to: '/audit-logs', icon: ClipboardDocumentListIcon },
-  { name: 'Configurações', to: '/settings', icon: AdjustmentsHorizontalIcon }
+  { name: 'ConfiguraÃ§Ãµes', to: '/settings', icon: AdjustmentsHorizontalIcon }
 ];
 
 const Sidebar: React.FC = () => {

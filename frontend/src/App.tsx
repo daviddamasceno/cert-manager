@@ -14,7 +14,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { accessToken, loading } = useAuth();
 
   if (loading) {
-    return <LoadingScreen message="Carregando sess?o..." />;
+    return <LoadingScreen message="Carregando sessão..." />;
   }
 
   if (!accessToken) {
