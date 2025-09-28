@@ -6,6 +6,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 import { PlusIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 interface AlertModelFormValues {
   name: string;
@@ -31,6 +32,8 @@ const AlertModelsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<AlertModel | null>(null);
   const { notify } = useToast();
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
   const { register, handleSubmit, reset, formState } = useForm<AlertModelFormValues>({ defaultValues });
 
   const fetchData = async () => {
@@ -43,12 +46,18 @@ const AlertModelsPage: React.FC = () => {
   }, []);
 
   const openCreate = () => {
+    if (!canManage) {
+      return;
+    }
     reset(defaultValues);
     setSelectedModel(null);
     setModalOpen(true);
   };
 
   const openEdit = (model: AlertModel) => {
+    if (!canManage) {
+      return;
+    }
     reset({
       name: model.name,
       offsetDaysBefore: model.offsetDaysBefore,
@@ -62,6 +71,9 @@ const AlertModelsPage: React.FC = () => {
   };
 
   const onSubmit = handleSubmit(async (values) => {
+    if (!canManage) {
+      return;
+    }
     try {
       const payload: Partial<AlertModel> = {
         ...values,
@@ -84,6 +96,9 @@ const AlertModelsPage: React.FC = () => {
   });
 
   const handleDelete = async (model: AlertModel) => {
+    if (!canManage) {
+      return;
+    }
     if (!confirm(`Deseja remover ${model.name}?`)) {
       return;
     }
@@ -105,14 +120,16 @@ const AlertModelsPage: React.FC = () => {
             Configure regras de disparo e personalize os templates dos avisos.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-          Novo modelo
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Novo modelo
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -142,20 +159,26 @@ const AlertModelsPage: React.FC = () => {
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.repeatEveryDays ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(model)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(model)}
-                        className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                      >
-                        <TrashIcon className="mr-1 h-4 w-4" /> Remover
-                      </button>
+                      {canManage ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(model)}
+                            className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(model)}
+                            className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                          >
+                            <TrashIcon className="mr-1 h-4 w-4" /> Remover
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Somente leitura</span>
+                      )}
                     </div>
                   </td>
                 </tr>

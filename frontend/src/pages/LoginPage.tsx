@@ -25,7 +25,7 @@ const LoginPage: React.FC = () => {
     setSubmitting(true);
     try {
       await login(values.email, values.password);
-      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sess?o iniciada com sucesso.' });
+      notify({ type: 'success', title: 'Bem-vindo!', description: 'Sessão iniciada com sucesso.' });
       navigate('/dashboard');
     } catch (error) {
       notify({ type: 'error', title: 'Falha no login', description: 'Verifique suas credenciais.' });

@@ -9,6 +9,8 @@ import AuditLogsPage from './pages/AuditLogsPage';
 import ChannelsPage from './pages/ChannelsPage';
 import DashboardLayout from './layouts/DashboardLayout';
 import LoadingScreen from './components/LoadingScreen';
+import UsersPage from './pages/UsersPage';
+import { UserRole } from './types';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { accessToken, loading } = useAuth();
@@ -19,6 +21,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   if (!accessToken) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const RoleRoute: React.FC<{ roles: UserRole[]; children: React.ReactNode }> = ({ roles, children }) => {
+  const { user } = useAuth();
+
+  if (!user || !roles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -41,6 +53,14 @@ const App: React.FC = () => {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="alert-models" element={<AlertModelsPage />} />
+          <Route
+            path="users"
+            element={
+              <RoleRoute roles={['admin']}>
+                <UsersPage />
+              </RoleRoute>
+            }
+          />
           <Route path="channels" element={<ChannelsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />

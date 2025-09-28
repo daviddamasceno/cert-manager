@@ -4,20 +4,34 @@ import {
   DocumentDuplicateIcon,
   BellAlertIcon,
   AdjustmentsHorizontalIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
+import { useAuth } from '../context/AuthContext';
+import { UserRole } from '../types';
 
-const navigation = [
+type NavItem = {
+  name: string;
+  to: string;
+  icon: typeof HomeIcon;
+  roles?: UserRole[];
+};
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', to: '/dashboard', icon: HomeIcon },
   { name: 'Certificados', to: '/certificates', icon: DocumentDuplicateIcon },
   { name: 'Modelos de alerta', to: '/alert-models', icon: BellAlertIcon },
+  { name: 'Usuários', to: '/users', icon: UserGroupIcon, roles: ['admin'] },
   { name: 'Canais', to: '/channels', icon: AdjustmentsHorizontalIcon },
   { name: 'Logs de auditoria', to: '/audit-logs', icon: ClipboardDocumentListIcon },
   { name: 'Configurações', to: '/settings', icon: AdjustmentsHorizontalIcon }
 ];
 
 const Sidebar: React.FC = () => {
+  const { hasRole } = useAuth();
+  const items = navigation.filter((item) => !item.roles || hasRole(item.roles));
+
   return (
     <nav className="flex flex-1 flex-col px-4 py-6">
       <div className="mb-8 flex items-center space-x-2">
@@ -25,7 +39,7 @@ const Sidebar: React.FC = () => {
         <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">Cert Manager</span>
       </div>
       <div className="flex-1 space-y-1">
-        {navigation.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.name}
             to={item.to}

@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, attachAuthInterceptor, setAccessToken as applyAccessToken } from '../services/apiClient';
+import { UserRole } from '../types';
 
 type User = {
   id: string;
   email: string;
+  role: UserRole;
 };
 
 type AuthResponse = {
@@ -18,12 +20,17 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refreshSession: () => Promise<string | null>;
+  hasRole: (role: UserRole | UserRole[]) => boolean;
 };
 
 const decodeToken = (token: string): User | null => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return { id: payload.sub || payload.email, email: payload.email };
+    const role = payload.role as UserRole | undefined;
+    if (!role || !payload.email) {
+      return null;
+    }
+    return { id: payload.sub || payload.email, email: payload.email, role };
   } catch (error) {
     console.error('Erro ao decodificar token', error);
     return null;
@@ -84,14 +91,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })();
   }, [refreshSession]);
 
+  const hasRole = useCallback(
+    (role: UserRole | UserRole[]) => {
+      const expected = Array.isArray(role) ? role : [role];
+      return user ? expected.includes(user.role) : false;
+    },
+    [user]
+  );
+
   const value = useMemo<AuthContextValue>(() => ({
     user,
     accessToken,
     loading,
     login,
     logout,
-    refreshSession
-  }), [user, accessToken, loading, login, logout, refreshSession]);
+    refreshSession,
+    hasRole
+  }), [user, accessToken, loading, login, logout, refreshSession, hasRole]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

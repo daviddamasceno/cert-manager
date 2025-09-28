@@ -1,6 +1,13 @@
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { SunIcon, MoonIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
+import { UserRole } from '../types';
+
+const roleLabels: Record<UserRole, string> = {
+  admin: 'Administrador',
+  editor: 'Editor',
+  viewer: 'Visualizador'
+};
 
 const TopBar: React.FC = () => {
   const { user, logout } = useAuth();
@@ -23,11 +30,13 @@ const TopBar: React.FC = () => {
         </button>
         <div className="flex items-center space-x-3 rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500 text-sm font-semibold text-white capitalize">
-            {user?.email[0] ?? '?'}
+            {user?.email?.[0]?.toUpperCase() ?? '?'}
           </div>
           <div className="text-xs">
             <p className="font-medium text-slate-700 dark:text-slate-200">{user?.email}</p>
-            <p className="text-slate-500 dark:text-slate-400">Administrador</p>
+            <p className="text-slate-500 dark:text-slate-400">
+              {user ? roleLabels[user.role] : '—'}
+            </p>
           </div>
         </div>
         <button
