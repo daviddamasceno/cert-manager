@@ -1,0 +1,52 @@
+{
+  "name": "cert-manager-backend",
+  "version": "1.0.0",
+  "description": "Backend service for the certificate management platform",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "scheduler": "node dist/scheduler.js",
+    "seed:sheets": "ts-node --project tsconfig.json scripts/seedSheets.ts",
+    "test": "ts-node --project tsconfig.json tests/crypto.test.ts"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.1.5",
+    "googleapis": "^133.0.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "luxon": "^3.4.4",
+    "nodemailer": "^6.9.12",
+    "uuid": "^9.0.1",
+    "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
+    "pino": "^8.17.1",
+    "pino-http": "^10.5.0",
+    "prom-client": "^14.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.7",
+    "@types/node-cron": "^3.0.7",
+    "@types/cors": "^2.8.17",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express-rate-limit": "^5.1.3",
+    "@types/pino": "^7.0.5",
+    "@types/luxon": "^3.3.4",
+    "@types/uuid": "^9.0.7",
+    "@types/nodemailer": "^6.4.14",
+    "@typescript-eslint/eslint-plugin": "^7.9.0",
+    "@typescript-eslint/parser": "^7.9.0",
+    "eslint": "^8.57.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2"
+  }
+}

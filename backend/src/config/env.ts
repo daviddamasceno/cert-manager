@@ -1,0 +1,86 @@
+﻿import dotenv from 'dotenv';
+
+dotenv.config();
+
+export interface AppConfig {
+  port: number;
+  env: string;
+  jwtSecret: string;
+  jwtExpiresIn: string;
+  jwtRefreshExpiresIn: string;
+  adminEmail: string;
+  adminPasswordHash: string;
+  googleServiceAccountJson: string;
+  googleSheetsId: string;
+  cacheTtlSeconds: number;
+  timezone: string;
+  encryptionKey: string;
+  scheduler: {
+    enabled: boolean;
+    hourlyCron: string;
+    dailyCron: string;
+  };
+  metrics: {
+    enabled: boolean;
+  };
+  logLevel: string;
+  rateLimits: {
+    testChannelWindowMs: number;
+    testChannelMax: number;
+  };
+}
+
+const required = (value: string | undefined, name: string): string => {
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+};
+
+const numeric = (value: string | undefined, fallback: number): number => {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const decodeBase64 = (value: string): string => {
+  try {
+    return Buffer.from(value, 'base64').toString('utf8');
+  } catch (error) {
+    throw new Error('Failed to decode GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 – ensure it is valid base64 JSON');
+  }
+};
+
+const config: AppConfig = {
+  port: numeric(process.env.PORT, 8080),
+  env: process.env.NODE_ENV || 'development',
+  jwtSecret: required(process.env.JWT_SECRET, 'JWT_SECRET'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+  adminEmail: required(process.env.ADMIN_EMAIL, 'ADMIN_EMAIL'),
+  adminPasswordHash: required(process.env.ADMIN_PASSWORD_HASH, 'ADMIN_PASSWORD_HASH'),
+  googleServiceAccountJson: decodeBase64(
+    required(process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64, 'GOOGLE_SERVICE_ACCOUNT_JSON_BASE64')
+  ),
+  googleSheetsId: required(process.env.SHEETS_SPREADSHEET_ID, 'SHEETS_SPREADSHEET_ID'),
+  cacheTtlSeconds: numeric(process.env.CACHE_TTL_SECONDS, 60),
+  timezone: process.env.TZ || 'America/Fortaleza',
+  encryptionKey: required(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY'),
+  scheduler: {
+    enabled: (process.env.SCHEDULER_ENABLED || 'false').toLowerCase() === 'true',
+    hourlyCron: process.env.SCHEDULER_HOURLY_CRON || '0 * * * *',
+    dailyCron: process.env.SCHEDULER_DAILY_CRON || '0 6 * * *'
+  },
+  metrics: {
+    enabled: (process.env.METRICS_ENABLED || 'true').toLowerCase() === 'true'
+  },
+  logLevel: process.env.LOG_LEVEL || 'info',
+  rateLimits: {
+    testChannelWindowMs: numeric(process.env.RATE_LIMIT_TEST_WINDOW_MS, 60000),
+    testChannelMax: numeric(process.env.RATE_LIMIT_TEST_MAX, 5)
+  }
+};
+
+export default config;
