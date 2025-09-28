@@ -1,4 +1,5 @@
-﻿import { google, sheets_v4 } from 'googleapis';
+import bcrypt from 'bcryptjs';
+import { google, sheets_v4 } from 'googleapis';
 import NodeCache from 'node-cache';
 import { v4 as uuid } from 'uuid';
 import config from '../config/env';
@@ -11,13 +12,17 @@ import {
   ChannelSecret,
   CertificateChannelLink,
   ChannelType,
-  User
+  RefreshToken,
+  User,
+  UserCredential
 } from '../domain/types';
 import {
   AlertModelRepository,
   AuditLogRepository,
   CertificateRepository,
   ChannelRepository,
+  RefreshTokenRepository,
+  UserCredentialsRepository,
   UserRepository
 } from './interfaces';
 import { withRetry } from '../utils/retry';
@@ -31,6 +36,8 @@ const SHEET_CHANNEL_SECRETS = 'channel_secrets';
 const SHEET_CERTIFICATE_CHANNELS = 'certificate_channels';
 const SHEET_AUDIT_LOGS = 'audit_logs';
 const SHEET_USERS = 'users';
+const SHEET_USER_CREDENTIALS = 'user_credentials';
+const SHEET_REFRESH_TOKENS = 'refresh_tokens';
 const SHEET_SMTP_HISTORY = 'smtp_sends_history';
 
 const HEADERS: Record<string, string[]> = {
@@ -70,7 +77,32 @@ const HEADERS: Record<string, string[]> = {
     'user_agent',
     'note'
   ],
-  [SHEET_USERS]: ['id', 'email', 'name', 'role', 'created_at'],
+  [SHEET_USERS]: [
+    'id',
+    'email',
+    'name',
+    'role',
+    'status',
+    'created_at',
+    'updated_at',
+    'last_login_at'
+  ],
+  [SHEET_USER_CREDENTIALS]: [
+    'user_id',
+    'password_hash',
+    'password_updated_at',
+    'password_needs_reset'
+  ],
+  [SHEET_REFRESH_TOKENS]: [
+    'id',
+    'user_id',
+    'token_hash',
+    'issued_at',
+    'expires_at',
+    'user_agent',
+    'ip',
+    'revoked'
+  ],
   [SHEET_SMTP_HISTORY]: ['id', 'channel_id', 'to', 'subject', 'status', 'error', 'timestamp']
 };
 
@@ -87,7 +119,9 @@ export class GoogleSheetsRepository
     AlertModelRepository,
     ChannelRepository,
     AuditLogRepository,
-    UserRepository {
+    UserRepository,
+    UserCredentialsRepository,
+    RefreshTokenRepository {
   private readonly sheets: sheets_v4.Sheets;
   private readonly cache: NodeCache;
 
@@ -213,7 +247,48 @@ export class GoogleSheetsRepository
     return map;
   }
 
-  private async replaceRows(tab: string, header: string[], predicate: (row: SheetRow) => boolean, newRows: SheetRow[]): Promise<void> {
+  private parseBoolean(value: string | undefined): boolean {
+    return (value || '').toLowerCase() === 'true';
+  }
+
+  private booleanString(value: boolean): string {
+    return value ? 'true' : 'false';
+  }
+
+  private mapUser(header: string[], row: SheetRow): User {
+    const map = this.mapRow(header, row);
+    return {
+      id: map['id'],
+      email: map['email'],
+      name: map['name'],
+      role: (map['role'] as User['role']) || 'admin',
+      status: (map['status'] as User['status']) || 'active',
+      createdAt: map['created_at'],
+      updatedAt: map['updated_at'] || map['created_at'],
+      lastLoginAt: map['last_login_at'] || undefined
+    };
+  }
+
+  private mapRefreshToken(header: string[], row: SheetRow): RefreshToken {
+    const map = this.mapRow(header, row);
+    return {
+      id: map['id'],
+      userId: map['user_id'],
+      tokenHash: map['token_hash'],
+      issuedAt: map['issued_at'],
+      expiresAt: map['expires_at'],
+      userAgent: map['user_agent'] || undefined,
+      ip: map['ip'] || undefined,
+      revoked: this.parseBoolean(map['revoked'])
+    };
+  }
+
+  private async replaceRows(
+    tab: string,
+    header: string[],
+    predicate: (row: SheetRow) => boolean,
+    newRows: SheetRow[]
+  ): Promise<void> {
     const { rows } = await this.readSheetWithHeader(tab, header);
     const filtered = rows.filter((row) => !predicate(row));
     await this.write(tab, [header, ...filtered, ...newRows]);
@@ -574,27 +649,213 @@ export class GoogleSheetsRepository
 
   /* Users */
 
+  async listUsers(): Promise<User[]> {
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    return rows.map((row) => this.mapUser(header, row));
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    const row = rows.find((current) => {
+      const map = this.mapRow(header, current);
+      return map['id'] === id;
+    });
+    return row ? this.mapUser(header, row) : null;
+  }
+
   async getUserByEmail(email: string): Promise<User | null> {
     const users = await this.listUsers();
     return users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
   }
 
   async createUser(user: User): Promise<void> {
-    await this.append(SHEET_USERS, [user.id, user.email, user.name, user.role, user.createdAt]);
+    await this.append(SHEET_USERS, [
+      user.id,
+      user.email,
+      user.name,
+      user.role,
+      user.status,
+      user.createdAt,
+      user.updatedAt,
+      user.lastLoginAt ?? ''
+    ]);
   }
 
-  async listUsers(): Promise<User[]> {
+  async updateUser(id: string, input: Partial<User>): Promise<User> {
     const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
-    return rows.map((row) => {
+    let updated: User | null = null;
+
+    const updatedRows = rows.map((row) => {
       const map = this.mapRow(header, row);
-      return {
-        id: map['id'],
-        email: map['email'],
-        name: map['name'],
-        role: (map['role'] as User['role']) || 'admin',
-        createdAt: map['created_at']
+      if (map['id'] !== id) {
+        return row;
+      }
+
+      const merged: User = {
+        id,
+        email: input.email ?? map['email'],
+        name: input.name ?? map['name'],
+        role: (input.role as User['role']) ?? ((map['role'] as User['role']) || 'admin'),
+        status: (input.status as User['status']) ?? ((map['status'] as User['status']) || 'active'),
+        createdAt: input.createdAt ?? map['created_at'],
+        updatedAt: input.updatedAt ?? (map['updated_at'] || map['created_at']),
+        lastLoginAt: input.lastLoginAt ?? (map['last_login_at'] || undefined)
       };
+
+      updated = merged;
+
+      return [
+        merged.id,
+        merged.email,
+        merged.name,
+        merged.role,
+        merged.status,
+        merged.createdAt,
+        merged.updatedAt,
+        merged.lastLoginAt ?? ''
+      ];
     });
+
+    if (!updated) {
+      throw new Error(`User with id ${id} not found`);
+    }
+
+    await this.write(SHEET_USERS, [header, ...updatedRows]);
+    return updated;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    const { header, rows } = await this.readSheetWithHeader(SHEET_USERS, HEADERS[SHEET_USERS]);
+    const filtered = rows.filter((row) => row[0] !== id);
+    await this.write(SHEET_USERS, [header, ...filtered]);
+
+    const credentialsHeader = HEADERS[SHEET_USER_CREDENTIALS];
+    const credentialUserIndex = credentialsHeader.indexOf('user_id');
+    await this.replaceRows(
+      SHEET_USER_CREDENTIALS,
+      credentialsHeader,
+      (row) => row[credentialUserIndex] === id,
+      []
+    );
+
+    const refreshHeader = HEADERS[SHEET_REFRESH_TOKENS];
+    const refreshUserIndex = refreshHeader.indexOf('user_id');
+    await this.replaceRows(
+      SHEET_REFRESH_TOKENS,
+      refreshHeader,
+      (row) => row[refreshUserIndex] === id,
+      []
+    );
+  }
+
+  async getUserCredential(userId: string): Promise<UserCredential | null> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_USER_CREDENTIALS,
+      HEADERS[SHEET_USER_CREDENTIALS]
+    );
+    const row = rows.find((current) => {
+      const map = this.mapRow(header, current);
+      return map['user_id'] === userId;
+    });
+
+    if (!row) {
+      return null;
+    }
+
+    const map = this.mapRow(header, row);
+    return {
+      userId: map['user_id'],
+      passwordHash: map['password_hash'],
+      passwordUpdatedAt: map['password_updated_at'],
+      passwordNeedsReset: this.parseBoolean(map['password_needs_reset'])
+    };
+  }
+
+  async saveUserCredential(credential: UserCredential): Promise<void> {
+    const row: SheetRow = [
+      credential.userId,
+      credential.passwordHash,
+      credential.passwordUpdatedAt,
+      this.booleanString(credential.passwordNeedsReset)
+    ];
+
+    const credentialHeader = HEADERS[SHEET_USER_CREDENTIALS];
+    const userIdIndex = credentialHeader.indexOf('user_id');
+    await this.replaceRows(
+      SHEET_USER_CREDENTIALS,
+      credentialHeader,
+      (current) => current[userIdIndex] === credential.userId,
+      [row]
+    );
+  }
+
+  async verifyUserPassword(userId: string, password: string): Promise<boolean> {
+    const credential = await this.getUserCredential(userId);
+    if (!credential) {
+      return false;
+    }
+    return bcrypt.compare(password, credential.passwordHash);
+  }
+
+  async createRefreshToken(token: RefreshToken): Promise<void> {
+    await this.append(SHEET_REFRESH_TOKENS, [
+      token.id,
+      token.userId,
+      token.tokenHash,
+      token.issuedAt,
+      token.expiresAt,
+      token.userAgent ?? '',
+      token.ip ?? '',
+      this.booleanString(token.revoked)
+    ]);
+  }
+
+  async revokeRefreshToken(id: string): Promise<void> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+
+    let found = false;
+    const updatedRows = rows.map((row) => {
+      const map = this.mapRow(header, row);
+      if (map['id'] !== id) {
+        return row;
+      }
+
+      found = true;
+      return header.map((column) => {
+        if (column === 'revoked') {
+          return this.booleanString(true);
+        }
+        return map[column] ?? '';
+      });
+    });
+
+    if (!found) {
+      throw new Error(`Refresh token with id ${id} not found`);
+    }
+
+    await this.write(SHEET_REFRESH_TOKENS, [header, ...updatedRows]);
+  }
+
+  async getRefreshTokenById(id: string): Promise<RefreshToken | null> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+    const row = rows.find((current) => this.mapRow(header, current)['id'] === id);
+    return row ? this.mapRefreshToken(header, row) : null;
+  }
+
+  async listRefreshTokensByUser(userId: string): Promise<RefreshToken[]> {
+    const { header, rows } = await this.readSheetWithHeader(
+      SHEET_REFRESH_TOKENS,
+      HEADERS[SHEET_REFRESH_TOKENS]
+    );
+    return rows
+      .map((row) => this.mapRefreshToken(header, row))
+      .filter((token) => token.userId === userId);
   }
 
   /* Audit */

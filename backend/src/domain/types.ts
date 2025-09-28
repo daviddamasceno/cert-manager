@@ -1,4 +1,4 @@
-﻿export type CertificateStatus = 'active' | 'expired' | 'revoked';
+export type CertificateStatus = 'active' | 'expired' | 'revoked';
 
 export type ChannelType =
   | 'email_smtp'
@@ -80,12 +80,35 @@ export interface AuditLog {
   note?: string;
 }
 
+export type UserStatus = 'active' | 'inactive' | 'suspended';
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: 'admin' | 'viewer';
+  status: UserStatus;
   createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
+export interface UserCredential {
+  userId: string;
+  passwordHash: string;
+  passwordUpdatedAt: string;
+  passwordNeedsReset: boolean;
+}
+
+export interface RefreshToken {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  issuedAt: string;
+  expiresAt: string;
+  userAgent?: string;
+  ip?: string;
+  revoked: boolean;
 }
 
 export interface NotificationContext {
