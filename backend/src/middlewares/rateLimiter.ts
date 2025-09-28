@@ -3,9 +3,9 @@ import config from '../config/env';
 
 const sensitiveRoutePattern = /\/(test|send)(?:[/?]|$)/;
 
-export const apiRateLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
+export const globalRateLimiter = rateLimit({
+  windowMs: config.rateLimits.globalWindowMs,
+  max: config.rateLimits.globalMax,
   standardHeaders: true,
   legacyHeaders: false
 });

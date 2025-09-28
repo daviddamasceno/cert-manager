@@ -2,8 +2,9 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import clsx from 'clsx';
-import { AuditLog } from '../types';
+import { AuditLog, User } from '../types';
 import { AuditLogFilters, listAuditLogs } from '../services/audit';
+import { listUsers } from '../services/users';
 
 dayjs.extend(relativeTime);
 
@@ -75,6 +76,7 @@ const AuditLogsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<AuditLogFilters>({ ...defaultFilters });
   const [error, setError] = useState<string | null>(null);
+  const [userDirectory, setUserDirectory] = useState<Record<string, User>>({});
 
   const fetchLogs = async (inputFilters: AuditLogFilters) => {
     setLoading(true);
@@ -99,6 +101,22 @@ const AuditLogsPage: React.FC = () => {
 
   useEffect(() => {
     void fetchLogs(defaultFilters);
+  }, []);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const data = await listUsers();
+        const directory = data.reduce<Record<string, User>>((accumulator, user) => {
+          accumulator[user.id] = user;
+          return accumulator;
+        }, {});
+        setUserDirectory(directory);
+      } catch (requestError) {
+        console.warn('Não foi possível carregar usuários para a auditoria', requestError);
+      }
+    };
+    void fetchUsers();
   }, []);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -158,9 +176,22 @@ const AuditLogsPage: React.FC = () => {
               name="actor"
               value={filters.actor}
               onChange={handleChange}
+              list="audit-actor-options"
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               placeholder="user-id ou email"
             />
+            <datalist id="audit-actor-options">
+              {Object.values(userDirectory).map((user) => (
+                <option key={user.id} value={user.email}>
+                  {user.name} ({user.id})
+                </option>
+              ))}
+              {Object.values(userDirectory).map((user) => (
+                <option key={`${user.id}-id`} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </datalist>
           </div>
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -295,6 +326,7 @@ const AuditLogsPage: React.FC = () => {
               <th className="px-4 py-3">Ator</th>
               <th className="px-4 py-3">Entidade</th>
               <th className="px-4 py-3">Acao</th>
+              <th className="px-4 py-3">Origem</th>
               <th className="px-4 py-3">Nota</th>
               <th className="px-4 py-3">Diff</th>
             </tr>
@@ -302,19 +334,20 @@ const AuditLogsPage: React.FC = () => {
           <tbody className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Carregando...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Nenhum registro encontrado para os filtros aplicados.
                 </td>
               </tr>
             ) : (
               logs.map((log) => {
                 const diffs = parseDiff(log.diffJson);
+                const actor = userDirectory[log.actorUserId];
                 return (
                   <tr key={`${log.timestamp}-${log.entity}-${log.entityId}-${log.action}`}>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
@@ -322,8 +355,9 @@ const AuditLogsPage: React.FC = () => {
                       <div className="text-xs text-slate-500 dark:text-slate-400">{dayjs(log.timestamp).fromNow()}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                      <div className="font-medium">{log.actorEmail || log.actorUserId}</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">{log.actorUserId}</div>
+                      <div className="font-medium">{actor?.name || log.actorEmail || log.actorUserId}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{actor?.email || log.actorEmail || 'N/A'}</div>
+                      <div className="text-xs text-slate-400">{log.actorUserId}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       <div className="font-medium uppercase tracking-wide text-xs text-slate-500 dark:text-slate-400">
@@ -335,6 +369,12 @@ const AuditLogsPage: React.FC = () => {
                       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                         {log.action}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{log.ip || 'N/A'}</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 break-all">
+                        {log.userAgent || 'N/A'}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                       {log.note ? log.note : <span className="text-xs text-slate-400">N/A</span>}

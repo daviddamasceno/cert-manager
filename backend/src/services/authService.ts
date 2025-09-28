@@ -10,6 +10,8 @@ import {
 } from '../repositories/interfaces';
 import { RefreshTokenRecord, User } from '../domain/types';
 import { parseDurationToMilliseconds, parseDurationToSeconds } from '../utils/duration';
+import { AuditService } from './auditService';
+import { assertStrongPassword } from '../utils/validators';
 
 export interface LoginResult {
   accessToken: string;
@@ -32,6 +34,7 @@ export interface AccessTokenPayload extends JwtPayload {
 const REFRESH_TOKEN_SEPARATOR = '.';
 const REFRESH_TOKEN_BYTES = 48;
 const REFRESH_TOKEN_BCRYPT_ROUNDS = 12;
+const PASSWORD_BCRYPT_ROUNDS = 12;
 
 const LOGIN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX = 10;
@@ -64,7 +67,8 @@ export class AuthService {
   constructor(
     private readonly users: UserRepository,
     private readonly userCredentials: UserCredentialsRepository,
-    private readonly refreshTokens: RefreshTokenRepository
+    private readonly refreshTokens: RefreshTokenRepository,
+    private readonly auditService: AuditService
   ) {}
 
   async login(email: string, password: string, context: AuthContext = {}): Promise<LoginResult> {
@@ -128,6 +132,72 @@ export class AuthService {
     return this.issueSession(user, context);
   }
 
+  async changePassword(
+    actor: { id: string; email: string },
+    currentPassword: string,
+    newPassword: string,
+    context: AuthContext = {}
+  ): Promise<void> {
+    const current = typeof currentPassword === 'string' ? currentPassword.trim() : '';
+    const next = typeof newPassword === 'string' ? newPassword.trim() : '';
+
+    if (!current || !next) {
+      throw new AuthError(400, 'Senha atual e nova senha são obrigatórias');
+    }
+    if (current === next) {
+      throw new AuthError(400, 'A nova senha deve ser diferente da senha atual');
+    }
+
+    try {
+      assertStrongPassword(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Senha não atende aos requisitos mínimos';
+      throw new AuthError(400, message);
+    }
+
+    const user = await this.users.getUserById(actor.id);
+    if (!user || user.status !== 'active') {
+      throw new AuthError(403, 'Usuário não autorizado para alterar a senha');
+    }
+
+    const credentials = await this.userCredentials.getUserCredentials(actor.id);
+    if (!credentials) {
+      throw new AuthError(401, 'Credenciais inválidas');
+    }
+
+    const matches = await bcrypt.compare(current, credentials.passwordHash);
+    if (!matches) {
+      throw new AuthError(401, 'Senha atual inválida');
+    }
+
+    const passwordHash = await bcrypt.hash(next, PASSWORD_BCRYPT_ROUNDS);
+    const now = new Date().toISOString();
+
+    await this.userCredentials.setUserCredentials({
+      userId: actor.id,
+      passwordHash,
+      passwordUpdatedAt: now,
+      passwordNeedsReset: false
+    });
+
+    await this.revokeUserRefreshTokens(actor.id).catch(() => undefined);
+
+    await this.auditService.record({
+      actorUserId: actor.id,
+      actorEmail: actor.email,
+      entity: 'user',
+      entityId: actor.id,
+      action: 'user_password_change',
+      diff: {
+        passwordUpdatedAt: { old: credentials.passwordUpdatedAt, new: now },
+        passwordNeedsReset: { old: credentials.passwordNeedsReset, new: false }
+      },
+      note: 'User changed own password',
+      ip: context.ip,
+      userAgent: context.userAgent
+    });
+  }
+
   async logout(refreshToken?: string): Promise<void> {
     if (!refreshToken) {
       return;
@@ -158,6 +228,11 @@ export class AuthService {
       refreshToken,
       expiresIn: parseDurationToSeconds(config.jwtExpiresIn)
     };
+  }
+
+  private async revokeUserRefreshTokens(userId: string): Promise<void> {
+    const tokens = await this.refreshTokens.listRefreshTokensByUser(userId);
+    await Promise.all(tokens.map((token) => this.refreshTokens.revokeRefreshToken(token.id)));
   }
 
   private generateAccessToken(user: User): string {

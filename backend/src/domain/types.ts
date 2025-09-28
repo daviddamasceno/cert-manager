@@ -6,6 +6,13 @@ export type ChannelType =
   | 'slack_webhook'
   | 'googlechat_webhook';
 
+export interface AuditActor {
+  id: string;
+  email: string;
+  ip?: string;
+  userAgent?: string;
+}
+
 export type AuditAction =
   | 'create'
   | 'update'
@@ -17,7 +24,8 @@ export type AuditAction =
   | 'user_create'
   | 'user_update'
   | 'user_disable'
-  | 'user_password_reset';
+  | 'user_password_reset'
+  | 'user_password_change';
 
 export interface Certificate {
   id: string;

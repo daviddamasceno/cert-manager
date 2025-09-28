@@ -27,6 +27,17 @@ export interface AuditQuery {
 export class AuditService {
   constructor(private readonly repository: AuditLogRepository) {}
 
+  private sanitizeMetadata(value?: string): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    return trimmed.slice(0, 255);
+  }
+
   async record(input: AuditRecordInput): Promise<void> {
     const entry: AuditLog = {
       timestamp: new Date().toISOString(),
@@ -36,8 +47,8 @@ export class AuditService {
       entityId: input.entityId,
       action: input.action,
       diffJson: JSON.stringify(input.diff ?? {}),
-      ip: input.ip,
-      userAgent: input.userAgent,
+      ip: this.sanitizeMetadata(input.ip),
+      userAgent: this.sanitizeMetadata(input.userAgent),
       note: input.note
     };
     await this.repository.appendAuditLog(entry);

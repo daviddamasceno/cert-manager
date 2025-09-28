@@ -1,12 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
-import {
-  ChannelInstance,
-  ChannelParam,
-  ChannelSecret,
-  ChannelType
-} from '../domain/types';
+import { AuditActor, ChannelInstance, ChannelParam, ChannelSecret, ChannelType } from '../domain/types';
 import { ChannelRepository } from '../repositories/interfaces';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
 import {
@@ -106,7 +101,7 @@ export class ChannelService {
     return responses;
   }
 
-  async create(input: ChannelInput, actor: { id: string; email: string }): Promise<ChannelResponse> {
+  async create(input: ChannelInput, actor: AuditActor): Promise<ChannelResponse> {
     const id = uuid();
     const timestamp = nowIso();
     const type = input.type;
@@ -137,7 +132,9 @@ export class ChannelService {
       diff: {
         name: { new: input.name },
         type: { new: type }
-      }
+      },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return {
@@ -150,7 +147,7 @@ export class ChannelService {
   async update(
     id: string,
     input: Partial<ChannelInput>,
-    actor: { id: string; email: string }
+    actor: AuditActor
   ): Promise<ChannelResponse> {
     const existing = await this.repository.getChannel(id);
     if (!existing) {
@@ -200,7 +197,9 @@ export class ChannelService {
       entity: 'channel',
       entityId: id,
       action: 'update',
-      diff
+      diff,
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return {
@@ -210,7 +209,7 @@ export class ChannelService {
     };
   }
 
-  async softDelete(id: string, actor: { id: string; email: string }): Promise<void> {
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
     await this.repository.softDeleteChannel(id, nowIso());
     await this.auditService.record({
       actorUserId: actor.id,
@@ -218,14 +217,16 @@ export class ChannelService {
       entity: 'channel',
       entityId: id,
       action: 'delete',
-      diff: {}
+      diff: {},
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
   }
 
   async testChannel(
     id: string,
     input: Record<string, unknown>,
-    actor: { id: string; email: string }
+    actor: AuditActor
   ): Promise<ChannelTestResult> {
     const channel = await this.repository.getChannel(id);
     if (!channel) {
@@ -264,7 +265,9 @@ export class ChannelService {
         entityId: id,
         action: 'test_send',
         diff: {},
-        note: `${channel.type} test sent to ${destinationDescription}`
+        note: `${channel.type} test sent to ${destinationDescription}`,
+        ip: actor.ip,
+        userAgent: actor.userAgent
       });
       return { success: true };
     } catch (error) {
@@ -276,7 +279,9 @@ export class ChannelService {
         entityId: id,
         action: 'test_send',
         diff: {},
-        note: `${channel.type} test failed${destinationDescription ? ` for ${destinationDescription}` : ''}: ${message}`
+        note: `${channel.type} test failed${destinationDescription ? ` for ${destinationDescription}` : ''}: ${message}`,
+        ip: actor.ip,
+        userAgent: actor.userAgent
       });
       return { success: false, error: message };
     }
@@ -285,7 +290,7 @@ export class ChannelService {
   async notifyChannel(
     id: string,
     payload: ChannelNotificationPayload,
-    actor: { id: string; email: string },
+    actor: AuditActor,
     metadata?: ChannelNotificationMetadata
   ): Promise<ChannelNotificationResult> {
     const channel = await this.repository.getChannel(id);
@@ -356,7 +361,7 @@ export class ChannelService {
 
   private async recordNotificationAudit(
     channel: ChannelInstance,
-    actor: { id: string; email: string },
+    actor: AuditActor,
     destination: string | undefined,
     metadata: ChannelNotificationMetadata | undefined,
     errorMessage?: string
@@ -383,7 +388,9 @@ export class ChannelService {
       entityId: channel.id,
       action: 'notification_sent',
       diff: {},
-      note: parts.join(' | ')
+      note: parts.join(' | '),
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
   }
 

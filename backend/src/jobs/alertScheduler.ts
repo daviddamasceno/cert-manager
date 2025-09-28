@@ -47,7 +47,9 @@ export class AlertSchedulerJob {
         try {
           await this.notificationService.sendAlerts(certificate, model, daysLeft, {
             id: 'system',
-            email: 'system@local'
+            email: 'system@local',
+            ip: 'scheduler',
+            userAgent: 'alert-scheduler'
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

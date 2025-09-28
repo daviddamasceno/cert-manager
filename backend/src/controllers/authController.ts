@@ -3,6 +3,8 @@ import config from '../config/env';
 import { authService } from '../services/container';
 import { AuthError } from '../services/authService';
 import { parseDurationToMilliseconds } from '../utils/duration';
+import { authMiddleware, AuthenticatedRequest } from '../middlewares/authMiddleware';
+import { resolveRequestActor } from '../utils/requestContext';
 
 const REFRESH_TOKEN_COOKIE = 'refresh_token';
 
@@ -10,7 +12,7 @@ const buildCookieOptions = (): CookieOptions => {
   const maxAge = parseDurationToMilliseconds(config.jwtRefreshExpiresIn) || 14 * 24 * 60 * 60 * 1000;
   return {
     httpOnly: true,
-    sameSite: (config.env === 'production' ? 'none' : 'lax') as CookieOptions['sameSite'],
+    sameSite: config.jwtCookieSameSite as CookieOptions['sameSite'],
     secure: config.env === 'production',
     maxAge,
     path: '/api/auth'
@@ -67,6 +69,25 @@ authController.post('/refresh', async (req, res) => {
     res
       .cookie(REFRESH_TOKEN_COOKIE, result.refreshToken, cookieOptions)
       .json({ accessToken: result.accessToken, expiresIn: result.expiresIn });
+  } catch (error) {
+    handleAuthError(res, error);
+  }
+});
+
+authController.post('/change-password', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  const actor = resolveRequestActor(req);
+  const currentPassword =
+    typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+
+  try {
+    await authService.changePassword(
+      { id: actor.id, email: actor.email },
+      currentPassword,
+      newPassword,
+      { ip: actor.ip, userAgent: actor.userAgent }
+    );
+    res.status(204).send();
   } catch (error) {
     handleAuthError(res, error);
   }

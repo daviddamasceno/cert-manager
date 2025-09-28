@@ -1,4 +1,4 @@
-﻿import { AlertModel, Certificate } from '../domain/types';
+﻿import { AlertModel, AuditActor, Certificate } from '../domain/types';
 import { AuditService } from './auditService';
 import logger from '../utils/logger';
 import {
@@ -48,7 +48,7 @@ export class NotificationService {
     certificate: Certificate,
     alertModel: AlertModel,
     daysLeft: number,
-    actor: { id: string; email: string }
+    actor: AuditActor
   ): Promise<void> {
     if (!certificate.channelIds.length) {
       logger.warn({ certificate: certificate.id }, 'No channel instances linked to certificate');
@@ -61,7 +61,9 @@ export class NotificationService {
         diff: {
           channelIds: { new: [] }
         },
-        note: 'Alert dispatch skipped: certificate without linked channels'
+        note: 'Alert dispatch skipped: certificate without linked channels',
+        ip: actor.ip,
+        userAgent: actor.userAgent
       });
       return;
     }
@@ -121,7 +123,9 @@ export class NotificationService {
       diff: {
         channelIds: { new: certificate.channelIds }
       },
-      note: noteParts.join(' | ')
+      note: noteParts.join(' | '),
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     logger.info(

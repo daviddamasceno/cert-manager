@@ -1,10 +1,10 @@
-import { randomBytes } from 'crypto';
+import { randomInt } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
-import { User, UserStatus } from '../domain/types';
+import { AuditActor, User, UserStatus } from '../domain/types';
 import { UserCredentialsRepository, UserRepository } from '../repositories/interfaces';
 import { AuditService } from './auditService';
-import { assertValidEmail, sanitizeString } from '../utils/validators';
+import { assertValidEmail, sanitizeString, isStrongPassword } from '../utils/validators';
 
 export interface CreateUserInput {
   email: string;
@@ -19,6 +19,14 @@ export interface UpdateUserInput {
 }
 
 const PASSWORD_BCRYPT_ROUNDS = 12;
+const TEMP_PASSWORD_LENGTH = 12;
+const UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const LOWERCASE = 'abcdefghijklmnopqrstuvwxyz';
+const NUMBERS = '0123456789';
+const SYMBOLS = '!@#$%^&*()-_=+[]{}<>?';
+const ALL_PASSWORD_CHARS = `${UPPERCASE}${LOWERCASE}${NUMBERS}${SYMBOLS}`;
+
+const randomChar = (charset: string): string => charset[randomInt(charset.length)];
 
 const isValidRole = (value: string): value is User['role'] =>
   value === 'admin' || value === 'editor' || value === 'viewer';
@@ -37,10 +45,7 @@ export class UserService {
     return this.users.listUsers();
   }
 
-  async create(
-    input: CreateUserInput,
-    actor: { id: string; email: string }
-  ): Promise<{ user: User; temporaryPassword: string }> {
+  async create(input: CreateUserInput, actor: AuditActor): Promise<{ user: User; temporaryPassword: string }> {
     const email = this.normalizeEmail(input.email);
     const name = this.normalizeName(input.name);
     const role = this.normalizeRole(input.role);
@@ -83,13 +88,15 @@ export class UserService {
         name: { new: user.name },
         role: { new: user.role },
         status: { new: user.status }
-      }
+      },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return { user, temporaryPassword };
   }
 
-  async update(id: string, input: UpdateUserInput, actor: { id: string; email: string }): Promise<User> {
+  async update(id: string, input: UpdateUserInput, actor: AuditActor): Promise<User> {
     const user = await this.users.getUserById(id);
     if (!user) {
       throw new Error('Usuário não encontrado.');
@@ -139,13 +146,15 @@ export class UserService {
       entity: 'user',
       entityId: id,
       action: 'user_update',
-      diff
+      diff,
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return updated;
   }
 
-  async disable(id: string, actor: { id: string; email: string }): Promise<void> {
+  async disable(id: string, actor: AuditActor): Promise<void> {
     const user = await this.users.getUserById(id);
     if (!user) {
       throw new Error('Usuário não encontrado.');
@@ -168,11 +177,13 @@ export class UserService {
       action: 'user_disable',
       diff: {
         status: { old: user.status, new: 'disabled' }
-      }
+      },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
   }
 
-  async resetPassword(id: string, actor: { id: string; email: string }): Promise<{ temporaryPassword: string }> {
+  async resetPassword(id: string, actor: AuditActor): Promise<{ temporaryPassword: string }> {
     const user = await this.users.getUserById(id);
     if (!user) {
       throw new Error('Usuário não encontrado.');
@@ -197,7 +208,9 @@ export class UserService {
       action: 'user_password_reset',
       diff: {
         passwordNeedsReset: { new: true }
-      }
+      },
+      ip: actor.ip,
+      userAgent: actor.userAgent
     });
 
     return { temporaryPassword };
@@ -235,11 +248,26 @@ export class UserService {
   }
 
   private generateTemporaryPassword(): string {
-    let password = '';
-    while (password.length < 12) {
-      password += randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '');
+    const characters = [
+      randomChar(UPPERCASE),
+      randomChar(LOWERCASE),
+      randomChar(NUMBERS),
+      randomChar(SYMBOLS)
+    ];
+
+    while (characters.length < TEMP_PASSWORD_LENGTH) {
+      characters.push(randomChar(ALL_PASSWORD_CHARS));
     }
-    return password.slice(0, 12);
+
+    for (let index = characters.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInt(index + 1);
+      const tmp = characters[index];
+      characters[index] = characters[swapIndex];
+      characters[swapIndex] = tmp;
+    }
+
+    const password = characters.join('');
+    return isStrongPassword(password) ? password : this.generateTemporaryPassword();
   }
 
   private async ensureAdminSurvives(
