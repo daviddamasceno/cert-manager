@@ -16,6 +16,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import clsx from 'clsx';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 
 dayjs.extend(relativeTime);
 
@@ -62,6 +63,9 @@ const CertificatesPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const { notify } = useToast();
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
+  const tableColumnCount = canManage ? 5 : 4;
 
   const {
     register,
@@ -126,12 +130,18 @@ const CertificatesPage: React.FC = () => {
   }, []);
 
   const openModalForCreate = () => {
+    if (!canManage) {
+      return;
+    }
     reset({ ...defaultFormValues });
     setSelectedCertificate(null);
     setModalOpen(true);
   };
 
   const openModalForEdit = (certificate: Certificate) => {
+    if (!canManage) {
+      return;
+    }
     reset({
       name: certificate.name,
       ownerEmail: certificate.ownerEmail,
@@ -175,6 +185,9 @@ const CertificatesPage: React.FC = () => {
   });
 
   const handleDelete = async (certificate: Certificate) => {
+    if (!canManage) {
+      return;
+    }
     if (!window.confirm(`Deseja remover ${certificate.name}?`)) {
       return;
     }
@@ -188,6 +201,9 @@ const CertificatesPage: React.FC = () => {
   };
 
   const handleTestNotification = async (certificate: Certificate) => {
+    if (!canManage) {
+      return;
+    }
     try {
       await sendTestNotification(certificate.id);
       notify({ type: 'success', title: 'Teste enviado' });
@@ -215,14 +231,16 @@ const CertificatesPage: React.FC = () => {
             Cadastre certificados, defina canais e vincule modelos de alerta.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openModalForCreate}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-          Novo certificado
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openModalForCreate}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Novo certificado
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -233,19 +251,19 @@ const CertificatesPage: React.FC = () => {
               <th className="px-4 py-3">Responsável</th>
               <th className="px-4 py-3">Expiração</th>
               <th className="px-4 py-3">Canais</th>
-              <th className="px-4 py-3">Ações</th>
+              {canManage ? <th className="px-4 py-3">Ações</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500 dark:text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-center text-slate-500 dark:text-slate-400" colSpan={tableColumnCount}>
                   Carregando...
                 </td>
               </tr>
             ) : certificates.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-500 dark:text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-center text-slate-500 dark:text-slate-400" colSpan={tableColumnCount}>
                   Nenhum certificado cadastrado.
                 </td>
               </tr>
@@ -280,31 +298,33 @@ const CertificatesPage: React.FC = () => {
                         <span className="text-slate-500 dark:text-slate-400">Nenhum canal</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => openModalForEdit(certificate)}
-                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleTestNotification(certificate)}
-                          className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
-                        >
-                          <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(certificate)}
-                          className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                        >
-                          <TrashIcon className="mr-1 h-4 w-4" /> Remover
-                        </button>
-                      </div>
-                    </td>
+                    {canManage ? (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => openModalForEdit(certificate)}
+                            className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTestNotification(certificate)}
+                            className="inline-flex items-center rounded-md border border-primary-500 px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 dark:border-primary-500/60 dark:text-primary-300 dark:hover:bg-primary-500/10"
+                          >
+                            <PaperAirplaneIcon className="mr-1 h-4 w-4" /> Enviar teste
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(certificate)}
+                            className="inline-flex items-center rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-500/60 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                          >
+                            <TrashIcon className="mr-1 h-4 w-4" /> Remover
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })
@@ -313,7 +333,7 @@ const CertificatesPage: React.FC = () => {
         </table>
       </div>
 
-      <Transition appear show={modalOpen} as={Fragment}>
+      <Transition appear show={modalOpen && canManage} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setModalOpen(false)}>
           <Transition.Child
             as={Fragment}

@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { useForm } from 'react-hook-form';
 import dayjs from 'dayjs';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { ChannelSummary, ChannelType } from '../types';
 import { createChannel, disableChannel, listChannels, testChannel, updateChannel } from '../services/channels';
 
@@ -88,6 +89,8 @@ const ChannelsPage: React.FC = () => {
   const [testTarget, setTestTarget] = useState('');
   const [testing, setTesting] = useState(false);
   const { notify } = useToast();
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin' || user?.role === 'editor';
 
   const { register, handleSubmit, reset, watch, setValue } = useForm<FormValues>({
     defaultValues
@@ -119,6 +122,9 @@ const ChannelsPage: React.FC = () => {
   }, []);
 
   const openCreateModal = () => {
+    if (!canManage) {
+      return;
+    }
     setExistingSecrets({});
     reset({ ...defaultValues });
     setSelectedChannel(null);
@@ -128,6 +134,9 @@ const ChannelsPage: React.FC = () => {
   };
 
   const openEditModal = (summary: ChannelSummary) => {
+    if (!canManage) {
+      return;
+    }
     setSelectedChannel(summary);
     setExistingSecrets(
       Object.fromEntries(summary.secrets.map((secret) => [secret.key, secret.hasValue]))
@@ -146,6 +155,9 @@ const ChannelsPage: React.FC = () => {
   };
 
   const onSubmit = handleSubmit(async (values) => {
+    if (!canManage) {
+      return;
+    }
     const payload = {
       name: values.name,
       type: values.type,
@@ -172,6 +184,9 @@ const ChannelsPage: React.FC = () => {
   });
 
   const handleDisable = async (channel: ChannelSummary) => {
+    if (!canManage) {
+      return;
+    }
     const confirmMsg = channel.channel.enabled
       ? 'Deseja desativar este canal?'
       : 'Deseja reativar este canal?';
@@ -207,6 +222,9 @@ const ChannelsPage: React.FC = () => {
   };
 
   const handleTestChannel = async () => {
+    if (!canManage) {
+      return;
+    }
     if (!selectedChannel) {
       return;
     }
@@ -266,13 +284,15 @@ const ChannelsPage: React.FC = () => {
             Gerencie instâncias de canais e segredos criptografados.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
-        >
-          <PlusIcon className="mr-2 h-4 w-4" /> Novo canal
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+          >
+            <PlusIcon className="mr-2 h-4 w-4" /> Novo canal
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -284,19 +304,19 @@ const ChannelsPage: React.FC = () => {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Criado</th>
               <th className="px-4 py-3">Atualizado</th>
-              <th className="px-4 py-3">Ações</th>
+              {canManage ? <th className="px-4 py-3">Ações</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Carregando...
                 </td>
               </tr>
             ) : channels.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={canManage ? 6 : 5} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Nenhum canal cadastrado.
                 </td>
               </tr>
@@ -323,26 +343,28 @@ const ChannelsPage: React.FC = () => {
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                     {dayjs(summary.channel.updatedAt).format('DD/MM/YYYY HH:mm')}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(summary)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PencilSquareIcon className="mr-1 h-4 w-4" />
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDisable(summary)}
-                        className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <PowerIcon className="mr-1 h-4 w-4" />
-                        {summary.channel.enabled ? 'Desativar' : 'Ativar'}
-                      </button>
-                    </div>
-                  </td>
+                  {canManage ? (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(summary)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PencilSquareIcon className="mr-1 h-4 w-4" />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDisable(summary)}
+                          className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <PowerIcon className="mr-1 h-4 w-4" />
+                          {summary.channel.enabled ? 'Desativar' : 'Ativar'}
+                        </button>
+                      </div>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -350,7 +372,7 @@ const ChannelsPage: React.FC = () => {
         </table>
       </div>
 
-      <Transition appear show={modalOpen} as={Fragment}>
+      <Transition appear show={modalOpen && canManage} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={() => setModalOpen(false)}>
           <Transition.Child
             as={Fragment}

@@ -2,6 +2,20 @@ export type CertificateStatus = 'active' | 'expired' | 'revoked';
 
 export type ChannelType = 'email_smtp' | 'telegram_bot' | 'slack_webhook' | 'googlechat_webhook';
 
+export type UserRole = 'admin' | 'editor' | 'viewer';
+export type UserStatus = 'active' | 'inactive' | 'disabled';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
 export interface Certificate {
   id: string;
   name: string;

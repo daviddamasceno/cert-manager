@@ -65,3 +65,13 @@ userController.delete('/:id', async (req: AuthenticatedRequest, res) => {
     res.status(400).json({ message: error instanceof Error ? error.message : String(error) });
   }
 });
+
+userController.post('/:id/reset-password', async (req: AuthenticatedRequest, res) => {
+  try {
+    const actor = req.user ?? { id: 'system', email: 'system@local' };
+    const result = await userService.resetPassword(req.params.id, actor);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : String(error) });
+  }
+});
