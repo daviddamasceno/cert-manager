@@ -75,7 +75,10 @@ export class AuthService {
 
     const { key, state } = this.checkRateLimit(normalizedEmail, context.ip);
 
-    const user = await this.users.getUserByEmail(normalizedEmail);
+    let user = await this.users.getUserByEmail(normalizedEmail);
+    if (!user) {
+      user = await this.ensureDefaultAdminUser(normalizedEmail);
+    }
     if (!user || user.status !== 'active') {
       this.registerFailure(key, state);
       throw new AuthError(401, 'Credenciais inválidas');
@@ -203,6 +206,64 @@ export class AuthService {
       return undefined;
     }
     return trimmed.slice(0, 255);
+  }
+
+  private async ensureDefaultAdminUser(email: string): Promise<User | null> {
+    if (!this.isDefaultAdminEmail(email)) {
+      return null;
+    }
+
+    const normalizedAdminEmail = this.getDefaultAdminEmail();
+    let user = await this.users.getUserByEmail(normalizedAdminEmail);
+
+    if (!user) {
+      const now = new Date().toISOString();
+      const adminUser: User = {
+        id: uuid(),
+        email: config.adminEmail.trim(),
+        name: 'Administrador',
+        role: 'admin',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now
+      };
+
+      try {
+        await this.users.createUser(adminUser);
+        user = adminUser;
+      } catch (error) {
+        // If another process created the user concurrently, fall back to fetching it.
+        user = await this.users.getUserByEmail(normalizedAdminEmail);
+        if (!user) {
+          throw error;
+        }
+      }
+    }
+
+    if (!user) {
+      return null;
+    }
+
+    const credentials = await this.userCredentials.getUserCredentials(user.id);
+    if (!credentials) {
+      const now = new Date().toISOString();
+      await this.userCredentials.setUserCredentials({
+        userId: user.id,
+        passwordHash: config.adminPasswordHash,
+        passwordUpdatedAt: now,
+        passwordNeedsReset: false
+      });
+    }
+
+    return user;
+  }
+
+  private isDefaultAdminEmail(email: string): boolean {
+    return email === this.getDefaultAdminEmail();
+  }
+
+  private getDefaultAdminEmail(): string {
+    return config.adminEmail.trim().toLowerCase();
   }
 
   private parseRefreshToken(token: string): { id: string; secret: string } {
