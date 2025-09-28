@@ -1,5 +1,6 @@
 ﻿import { v4 as uuid } from 'uuid';
 import nodemailer from 'nodemailer';
+import axios from 'axios';
 import {
   ChannelInstance,
   ChannelParam,
@@ -16,15 +17,15 @@ const CHANNEL_DEFINITIONS: Record<ChannelType, { params: string[]; secrets: stri
     secrets: ['smtp_pass']
   },
   telegram_bot: {
-    params: ['chat_ids'],
+    params: ['chat_ids', 'timeout_ms'],
     secrets: ['bot_token']
   },
   slack_webhook: {
-    params: ['channel_override'],
+    params: ['channel_override', 'timeout_ms'],
     secrets: ['webhook_url']
   },
   googlechat_webhook: {
-    params: ['space_name'],
+    params: ['space_name', 'timeout_ms'],
     secrets: ['webhook_url']
   }
 };
@@ -197,7 +198,7 @@ export class ChannelService {
 
   async testChannel(
     id: string,
-    input: { to: string },
+    input: Record<string, unknown>,
     actor: { id: string; email: string }
   ): Promise<ChannelTestResult> {
     const channel = await this.repository.getChannel(id);
@@ -209,17 +210,39 @@ export class ChannelService {
       throw new Error('Channel disabled');
     }
 
-    if (channel.type !== 'email_smtp') {
-      throw new Error('Channel type does not support test operation yet');
-    }
-
     const [params, secrets] = await Promise.all([
       this.repository.getChannelParams(id),
       this.repository.getChannelSecrets(id)
     ]);
 
+    const paramMap = this.composeParamMap(channel.type, params);
+    const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
+    let destinationDescription = '';
+
     try {
-      await this.sendSmtpTest(channel, params, secrets, input.to);
+      switch (channel.type) {
+        case 'email_smtp': {
+          const to = this.extractEmailRecipient(input);
+          destinationDescription = `email ${to}`;
+          await this.sendSmtpTest(channel, params, secrets, to);
+          break;
+        }
+        case 'telegram_bot': {
+          destinationDescription = await this.sendTelegramTest(channel, paramMap, secretMap);
+          break;
+        }
+        case 'slack_webhook': {
+          destinationDescription = await this.sendSlackTest(channel, paramMap, secretMap);
+          break;
+        }
+        case 'googlechat_webhook': {
+          destinationDescription = await this.sendGoogleChatTest(channel, paramMap, secretMap);
+          break;
+        }
+        default:
+          throw new Error('Channel type does not support test operation yet');
+      }
+
       await this.auditService.record({
         actorUserId: actor.id,
         actorEmail: actor.email,
@@ -227,11 +250,11 @@ export class ChannelService {
         entityId: id,
         action: 'test_send',
         diff: {},
-        note: `SMTP test sent to ${input.to}`
+        note: `${channel.type} test sent to ${destinationDescription}`
       });
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = this.extractErrorMessage(error);
       await this.auditService.record({
         actorUserId: actor.id,
         actorEmail: actor.email,
@@ -239,10 +262,171 @@ export class ChannelService {
         entityId: id,
         action: 'test_send',
         diff: {},
-        note: `SMTP test failed for ${input.to}: ${message}`
+        note: `${channel.type} test failed${destinationDescription ? ` for ${destinationDescription}` : ''}: ${message}`
       });
       return { success: false, error: message };
     }
+  }
+
+  private extractEmailRecipient(input: Record<string, unknown>): string {
+    const toRaw = [input['to'], input['to_email']]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find((value) => value.length > 0);
+    if (!toRaw) {
+      throw new Error('Parâmetro to_email obrigatório');
+    }
+    return toRaw;
+  }
+
+  private async sendTelegramTest(
+    channel: ChannelInstance,
+    paramMap: Record<string, string>,
+    secretMap: Map<string, string>
+  ): Promise<string> {
+    const chatIds = paramMap['chat_ids']
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    if (chatIds.length === 0) {
+      throw new Error('Nenhum chat_id configurado. Atualize o canal antes de testar.');
+    }
+
+    const tokenCipher = secretMap.get('bot_token');
+    if (!tokenCipher) {
+      throw new Error('Token do bot não configurado.');
+    }
+    const token = decryptSecret(tokenCipher);
+
+    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
+    const message = `Teste de integração: ${channel.name}`;
+    const baseUrl = `https://api.telegram.org/bot${token}`;
+
+    for (const chatId of chatIds) {
+      await this.executeWithRetry(async () => {
+        const response = await axios.post(
+          `${baseUrl}/sendMessage`,
+          { chat_id: chatId, text: message },
+          { timeout }
+        );
+        if (!response.data?.ok) {
+          const description = response.data?.description || 'Falha ao enviar mensagem ao Telegram';
+          throw new Error(description);
+        }
+      });
+    }
+
+    return `Telegram chats: ${chatIds.join(', ')}`;
+  }
+
+  private async sendSlackTest(
+    channel: ChannelInstance,
+    paramMap: Record<string, string>,
+    secretMap: Map<string, string>
+  ): Promise<string> {
+    const webhookCipher = secretMap.get('webhook_url');
+    if (!webhookCipher) {
+      throw new Error('Webhook URL não configurado.');
+    }
+    const webhookUrl = decryptSecret(webhookCipher);
+    const channelOverride = paramMap['channel_override']?.trim();
+    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
+
+    const payload: Record<string, unknown> = {
+      text: `Teste de integração: ${channel.name}`
+    };
+    if (channelOverride) {
+      payload.channel = channelOverride;
+    }
+
+    await this.executeWithRetry(async () => {
+      const response = await axios.post(webhookUrl, payload, {
+        timeout,
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (typeof response.data === 'string' && response.data !== 'ok') {
+        throw new Error(response.data);
+      }
+    });
+
+    return channelOverride
+      ? `Slack channel ${channelOverride}`
+      : 'Slack default webhook destination';
+  }
+
+  private async sendGoogleChatTest(
+    channel: ChannelInstance,
+    paramMap: Record<string, string>,
+    secretMap: Map<string, string>
+  ): Promise<string> {
+    const webhookCipher = secretMap.get('webhook_url');
+    if (!webhookCipher) {
+      throw new Error('Webhook do Google Chat não configurado.');
+    }
+    const webhookUrl = decryptSecret(webhookCipher);
+    const spaceName = paramMap['space_name']?.trim();
+    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
+
+    await this.executeWithRetry(async () => {
+      await axios.post(
+        webhookUrl,
+        { text: `Teste de integração: ${channel.name}` },
+        { timeout, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    return spaceName ? `Google Chat space ${spaceName}` : 'Google Chat webhook padrão';
+  }
+
+  private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    const maxAttempts = 3;
+    let attempt = 0;
+    let delayMs = 200;
+
+    while (true) {
+      try {
+        return await fn();
+      } catch (error) {
+        attempt += 1;
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= 2;
+      }
+    }
+  }
+
+  private parsePositiveNumber(value: string | undefined, fallback: number): number {
+    if (!value) {
+      return fallback;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  private extractErrorMessage(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const responseData = error.response?.data;
+      if (responseData) {
+        if (typeof responseData === 'string') {
+          return responseData;
+        }
+        if (typeof responseData === 'object') {
+          const maybeMessage =
+            (responseData as { description?: string }).description ||
+            (responseData as { error?: string }).error ||
+            (responseData as { message?: string }).message;
+          if (maybeMessage) {
+            return maybeMessage;
+          }
+        }
+      }
+      if (error.code === 'ECONNABORTED') {
+        return 'Tempo limite excedido ao contatar o serviço externo';
+      }
+      return error.message;
+    }
+    return error instanceof Error ? error.message : String(error);
   }
 
   private async buildParams(
@@ -334,22 +518,13 @@ export class ChannelService {
     const paramMap = this.composeParamMap(channel.type, params);
     const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
 
-    const sanitize = (value: string | undefined): string => value?.trim() ?? '';
-    const parsePositiveNumber = (value: string | undefined, fallback: number): number => {
-      if (!value) {
-        return fallback;
-      }
-      const parsed = Number(value);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    };
-
-    const host = sanitize(paramMap['smtp_host']);
-    const port = parsePositiveNumber(paramMap['smtp_port'], 587);
-    const user = sanitize(paramMap['smtp_user']);
-    const fromName = sanitize(paramMap['from_name']) || 'Cert Manager';
-    const fromEmail = sanitize(paramMap['from_email']) || user;
-    const tlsFlag = sanitize(paramMap['tls']).toLowerCase();
-    const timeout = parsePositiveNumber(paramMap['timeout_ms'], 15000);
+    const host = this.sanitize(paramMap['smtp_host']);
+    const port = this.parsePositiveNumber(paramMap['smtp_port'], 587);
+    const user = this.sanitize(paramMap['smtp_user']);
+    const fromName = this.sanitize(paramMap['from_name']) || 'Cert Manager';
+    const fromEmail = this.sanitize(paramMap['from_email']) || user;
+    const tlsFlag = this.sanitize(paramMap['tls']).toLowerCase();
+    const timeout = this.parsePositiveNumber(paramMap['timeout_ms'], 15000);
     const encryptedPass = secretMap.get('smtp_pass');
     const pass = encryptedPass ? decryptSecret(encryptedPass) : undefined;
 
@@ -384,5 +559,9 @@ export class ChannelService {
       subject: 'Teste de SMTP',
       text: 'Teste de SMTP realizado com sucesso pelo Cert Manager.'
     });
+  }
+
+  private sanitize(value: string | undefined): string {
+    return value?.trim() ?? '';
   }
 }

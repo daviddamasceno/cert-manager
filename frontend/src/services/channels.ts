@@ -28,16 +28,12 @@ export const disableChannel = async (id: string): Promise<void> => {
   await api.delete(`/channels/${id}`);
 };
 
-export interface ChannelTestPayload {
-  to_email: string;
-}
-
 export interface ChannelTestResult {
   success: boolean;
   error?: string;
 }
 
-export const testChannel = async (id: string, payload: ChannelTestPayload): Promise<ChannelTestResult> => {
+export const testChannel = async (id: string, payload: Record<string, unknown> = {}): Promise<ChannelTestResult> => {
   const { data } = await api.post<ChannelTestResult>(`/channels/${id}/test`, payload);
   return data;
 };

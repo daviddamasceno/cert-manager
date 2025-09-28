@@ -44,18 +44,25 @@ const TYPE_DEFINITIONS: Record<ChannelType, { label: string; params: FieldDefini
         key: 'chat_ids',
         label: 'Chat IDs (separados por vírgula)',
         placeholder: '123456,@canal'
-      }
+      },
+      { key: 'timeout_ms', label: 'Timeout (ms)', type: 'number' }
     ],
     secrets: [{ key: 'bot_token', label: 'Token do bot' }]
   },
   slack_webhook: {
     label: 'Slack Webhook',
-    params: [{ key: 'channel_override', label: 'Canal (opcional)' }],
+    params: [
+      { key: 'channel_override', label: 'Canal (opcional)' },
+      { key: 'timeout_ms', label: 'Timeout (ms)', type: 'number' }
+    ],
     secrets: [{ key: 'webhook_url', label: 'URL do webhook' }]
   },
   googlechat_webhook: {
     label: 'Google Chat Webhook',
-    params: [{ key: 'space_name', label: 'Space (opcional)' }],
+    params: [
+      { key: 'space_name', label: 'Space (opcional)' },
+      { key: 'timeout_ms', label: 'Timeout (ms)', type: 'number' }
+    ],
     secrets: [{ key: 'webhook_url', label: 'URL do webhook' }]
   }
 };
@@ -78,7 +85,7 @@ const ChannelsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<ChannelSummary | null>(null);
   const [existingSecrets, setExistingSecrets] = useState<Record<string, boolean>>({});
-  const [testEmail, setTestEmail] = useState('');
+  const [testTarget, setTestTarget] = useState('');
   const [testing, setTesting] = useState(false);
   const { notify } = useToast();
 
@@ -115,7 +122,7 @@ const ChannelsPage: React.FC = () => {
     setExistingSecrets({});
     reset({ ...defaultValues });
     setSelectedChannel(null);
-    setTestEmail('');
+    setTestTarget('');
     setTesting(false);
     setModalOpen(true);
   };
@@ -133,7 +140,7 @@ const ChannelsPage: React.FC = () => {
       secrets: Object.fromEntries(summary.secrets.map((secret) => [secret.key, '']))
     });
     setValue('params.tls', summary.params.tls === 'off' ? 'off' : 'on', { shouldDirty: false });
-    setTestEmail(summary.params.from_email || '');
+    setTestTarget(summary.channel.type === 'email_smtp' ? summary.params.from_email || '' : '');
     setTesting(false);
     setModalOpen(true);
   };
@@ -199,31 +206,52 @@ const ChannelsPage: React.FC = () => {
     setValue('params.tls', checked ? 'on' : 'off', { shouldDirty: true });
   };
 
-  const handleTestSmtp = async () => {
+  const handleTestChannel = async () => {
     if (!selectedChannel) {
       return;
     }
 
-    const recipient = testEmail.trim();
-    if (!recipient) {
-      notify({ type: 'info', title: 'Informe um destinatário para o teste' });
-      return;
+    const payload: Record<string, unknown> = {};
+    const type = selectedChannel.channel.type;
+
+    if (type === 'email_smtp') {
+      const recipient = testTarget.trim();
+      if (!recipient) {
+        notify({ type: 'info', title: 'Informe um destinatário para o teste' });
+        return;
+      }
+      payload.to_email = recipient;
     }
 
     try {
       setTesting(true);
-      const result = await testChannel(selectedChannel.channel.id, { to_email: recipient });
+      const result = await testChannel(selectedChannel.channel.id, payload);
       if (result.success) {
-        notify({ type: 'success', title: 'Teste SMTP enviado', description: `Mensagem enviada para ${recipient}` });
+        const typeLabel = TYPE_DEFINITIONS[selectedChannel.channel.type].label;
+        const descriptionMap: Record<ChannelType, string> = {
+          email_smtp: `Mensagem enviada para ${payload.to_email as string}`,
+          telegram_bot: `Verifique os chats configurados (${selectedChannel.params.chat_ids || 'chat_ids não definido'})`,
+          slack_webhook: selectedChannel.params.channel_override
+            ? `Mensagem solicitada no canal ${selectedChannel.params.channel_override}`
+            : 'Mensagem solicitada para o destino padrão do webhook',
+          googlechat_webhook: selectedChannel.params.space_name
+            ? `Mensagem publicada no espaço ${selectedChannel.params.space_name}`
+            : 'Mensagem publicada no webhook Google Chat padrão'
+        };
+        notify({
+          type: 'success',
+          title: `Teste ${typeLabel} enviado`,
+          description: descriptionMap[type]
+        });
       } else {
-        const description = result.error || 'O servidor SMTP retornou uma falha.';
-        notify({ type: 'error', title: 'Teste SMTP falhou', description });
+        const description = result.error || 'O conector retornou uma falha.';
+        notify({ type: 'error', title: 'Teste do canal falhou', description });
       }
     } catch (error) {
       const description =
         (error as any)?.response?.data?.message ||
-        (error instanceof Error ? error.message : 'Não foi possível executar o teste SMTP.');
-      notify({ type: 'error', title: 'Teste SMTP falhou', description });
+        (error instanceof Error ? error.message : 'Não foi possível executar o teste do canal.');
+      notify({ type: 'error', title: 'Teste do canal falhou', description });
     } finally {
       setTesting(false);
     }
@@ -461,32 +489,93 @@ const ChannelsPage: React.FC = () => {
                       ))}
                     </section>
 
-                    {selectedType === 'email_smtp' && selectedChannel && (
+                    {selectedChannel && (
                       <section className="space-y-3">
-                        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Teste SMTP</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Informe um destinatário temporário para validar a configuração. O teste respeita o rate limit da API.
-                        </p>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                          <input
-                            type="email"
-                            value={testEmail}
-                            onChange={(event) => setTestEmail(event.target.value)}
-                            placeholder="destinatario@exemplo.com"
-                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleTestSmtp}
-                            disabled={testing}
-                            className={clsx(
-                              'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
-                              testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
-                            )}
-                          >
-                            {testing ? 'Testando...' : 'Testar SMTP'}
-                          </button>
-                        </div>
+                        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Teste do canal</h3>
+                        {selectedType === 'email_smtp' ? (
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Informe um destinatário temporário para validar a configuração. O teste respeita o rate limit da API.
+                            </p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                              <input
+                                type="email"
+                                value={testTarget}
+                                onChange={(event) => setTestTarget(event.target.value)}
+                                placeholder="destinatario@exemplo.com"
+                                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleTestChannel}
+                                disabled={testing}
+                                className={clsx(
+                                  'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
+                                  testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                                )}
+                              >
+                                {testing ? 'Testando...' : 'Enviar teste'}
+                              </button>
+                            </div>
+                          </>
+                        ) : selectedType === 'telegram_bot' ? (
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              O bot irá enviar uma mensagem para os chat IDs configurados ({
+                                selectedChannel.params.chat_ids || 'chat_ids não definido'
+                              }).
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleTestChannel}
+                              disabled={testing}
+                              className={clsx(
+                                'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
+                                testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                              )}
+                            >
+                              {testing ? 'Testando...' : 'Enviar teste'}
+                            </button>
+                          </>
+                        ) : selectedType === 'slack_webhook' ? (
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              O webhook enviará a mensagem para o Slack utilizando {selectedChannel.params.channel_override
+                                ? `o canal ${selectedChannel.params.channel_override}`
+                                : 'o destino padrão do webhook'}.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleTestChannel}
+                              disabled={testing}
+                              className={clsx(
+                                'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
+                                testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                              )}
+                            >
+                              {testing ? 'Testando...' : 'Enviar teste'}
+                            </button>
+                          </>
+                        ) : selectedType === 'googlechat_webhook' ? (
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              A mensagem será publicada no Google Chat {selectedChannel.params.space_name
+                                ? `para o espaço ${selectedChannel.params.space_name}`
+                                : 'usando o webhook padrão'}.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleTestChannel}
+                              disabled={testing}
+                              className={clsx(
+                                'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
+                                testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                              )}
+                            >
+                              {testing ? 'Testando...' : 'Enviar teste'}
+                            </button>
+                          </>
+                        ) : null}
                       </section>
                     )}
 
