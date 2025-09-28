@@ -124,7 +124,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               leaveFrom="opacity-100"
               leaveTo="opacity-0"
             >
-              <div className="pointer-events-auto w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-slate-800">
+              <div className="pointer-events-auto w-full min-w-[20rem] max-w-2xl overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-slate-800">
                 <div className="p-4">
                   <div className="flex items-start">
                     <div className="flex-shrink-0">{iconByType[toast.type]}</div>
@@ -134,14 +134,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         <p className="mt-1 text-sm text-slate-600 dark:text-slate-200">{toast.description}</p>
                       ) : null}
                       {toast.copyable ? (
-                        <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
+                        <div className="mt-3 rounded-md border border-slate-300 bg-slate-100 px-4 py-3 text-slate-900 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
                           {toast.copyable.label ? (
                             <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               {toast.copyable.label}
                             </p>
                           ) : null}
-                          <div className="mt-1 flex items-center gap-3">
-                            <code className="flex-1 break-all font-mono text-sm">{toast.copyable.value}</code>
+                          <div className="mt-2 flex items-center gap-3">
+                            <code className="flex-1 break-words font-mono text-base leading-relaxed text-slate-900 dark:text-slate-100">
+                              {toast.copyable.value}
+                            </code>
                             <button
                               type="button"
                               onClick={() => handleCopy(toast.id, toast.copyable!.value)}
