@@ -93,7 +93,7 @@ const CertificatesPage: React.FC = () => {
   }, [channelSummaries]);
 
   const activeChannels = useMemo(
-    () => channelSummaries.filter((summary) => summary.channel.enabled),
+    () => channelSummaries.filter((summary) => summary.channel.enabled && !summary.channel.deleted),
     [channelSummaries]
   );
 
@@ -270,9 +270,13 @@ const CertificatesPage: React.FC = () => {
             ) : (
               certificates.map((certificate) => {
                 const daysLeft = dayjs(certificate.expiresAt).diff(dayjs(), 'day');
-                const channelLabels = certificate.channelIds
-                  .map((id) => channelMap[id]?.channel.name)
-                  .filter(Boolean);
+                const channelBadges = certificate.channelIds.map((id) => {
+                  const summary = channelMap[id];
+                  if (!summary || summary.channel.deleted) {
+                    return { id, label: 'Canal removido', removed: true };
+                  }
+                  return { id, label: summary.channel.name, removed: !summary.channel.enabled };
+                });
 
                 return (
                   <tr key={certificate.id}>
@@ -282,15 +286,20 @@ const CertificatesPage: React.FC = () => {
                       {dayjs(certificate.expiresAt).format('DD/MM/YYYY')} ({dayjs(certificate.expiresAt).fromNow()})
                     </td>
                     <td className="px-4 py-3">
-                      {channelLabels.length ? (
+                      {channelBadges.length ? (
                         <div className="flex flex-wrap gap-1">
-                          {channelLabels.map((label) => (
+                          {channelBadges.map((badge) => (
                             <span
-                              key={label}
-                              className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                              key={`${badge.id}-${badge.label}`}
+                              className={clsx(
+                                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                                badge.removed
+                                  ? 'bg-rose-500/10 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300'
+                                  : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                              )}
                             >
                               <TagIcon className="h-3 w-3" />
-                              {label}
+                              {badge.label}
                             </span>
                           ))}
                         </div>

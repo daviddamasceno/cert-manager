@@ -21,6 +21,8 @@ export type AuditAction =
   | 'link'
   | 'unlink'
   | 'notification_sent'
+  | 'channel_delete'
+  | 'channel_unlink'
   | 'user_create'
   | 'user_update'
   | 'user_disable'
@@ -54,6 +56,7 @@ export interface ChannelInstance {
   name: string;
   type: ChannelType;
   enabled: boolean;
+  deleted: boolean;
   createdAt: string;
   updatedAt: string;
 }

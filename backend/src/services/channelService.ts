@@ -1,7 +1,14 @@
 import { v4 as uuid } from 'uuid';
 import nodemailer from 'nodemailer';
 import axios from 'axios';
-import { AuditActor, ChannelInstance, ChannelParam, ChannelSecret, ChannelType } from '../domain/types';
+import {
+  AuditActor,
+  CertificateChannelLink,
+  ChannelInstance,
+  ChannelParam,
+  ChannelSecret,
+  ChannelType
+} from '../domain/types';
 import { ChannelRepository } from '../repositories/interfaces';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
 import {
@@ -88,6 +95,9 @@ export class ChannelService {
     const responses: ChannelResponse[] = [];
 
     for (const channel of channels) {
+      if (channel.deleted) {
+        continue;
+      }
       const params = await this.repository.getChannelParams(channel.id);
       const secrets = await this.repository.getChannelSecrets(channel.id);
       responses.push({
@@ -115,6 +125,7 @@ export class ChannelService {
       name: input.name,
       type,
       enabled: input.enabled !== undefined ? input.enabled : true,
+      deleted: false,
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -154,6 +165,10 @@ export class ChannelService {
       throw new Error('Channel not found');
     }
 
+    if (existing.deleted) {
+      throw new Error('Channel was deleted and cannot be updated');
+    }
+
     const newType = input.type ?? existing.type;
     const definition = CHANNEL_DEFINITIONS[newType];
     if (!definition) {
@@ -165,6 +180,7 @@ export class ChannelService {
       name: input.name ?? existing.name,
       type: newType,
       enabled: input.enabled !== undefined ? input.enabled : existing.enabled,
+      deleted: existing.deleted,
       updatedAt: nowIso()
     };
 
@@ -202,6 +218,11 @@ export class ChannelService {
       userAgent: actor.userAgent
     });
 
+    if (existing.enabled && !channel.enabled) {
+      const removedLinks = await this.repository.unlinkChannel(id);
+      await this.recordChannelUnlinks(id, removedLinks, actor);
+    }
+
     return {
       channel,
       params: this.composeParamMap(channel.type, params),
@@ -210,17 +231,31 @@ export class ChannelService {
   }
 
   async softDelete(id: string, actor: AuditActor): Promise<void> {
-    await this.repository.softDeleteChannel(id, nowIso());
+    const existing = await this.repository.getChannel(id);
+    if (!existing || existing.deleted) {
+      throw new Error('Channel not found');
+    }
+
+    const timestamp = nowIso();
+    await this.repository.softDeleteChannel(id, timestamp);
+    const removedLinks = await this.repository.unlinkChannel(id);
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
       entity: 'channel',
       entityId: id,
-      action: 'delete',
-      diff: {},
+      action: 'channel_delete',
+      diff: {
+        status: { old: existing.enabled ? 'active' : 'inactive', new: 'deleted' },
+        deleted: { old: false, new: true },
+        enabled: { old: existing.enabled, new: false }
+      },
+      note: `channel=${existing.name}`,
       ip: actor.ip,
       userAgent: actor.userAgent
     });
+
+    await this.recordChannelUnlinks(id, removedLinks, actor);
   }
 
   async testChannel(
@@ -231,6 +266,10 @@ export class ChannelService {
     const channel = await this.repository.getChannel(id);
     if (!channel) {
       throw new Error('Channel not found');
+    }
+
+    if (channel.deleted) {
+      throw new Error('Channel deleted');
     }
 
     if (!channel.enabled) {
@@ -296,6 +335,10 @@ export class ChannelService {
     const channel = await this.repository.getChannel(id);
     if (!channel) {
       throw new Error('Channel not found');
+    }
+
+    if (channel.deleted) {
+      throw new Error('Channel deleted');
     }
 
     if (!channel.enabled) {
@@ -392,6 +435,34 @@ export class ChannelService {
       ip: actor.ip,
       userAgent: actor.userAgent
     });
+  }
+
+  private async recordChannelUnlinks(
+    channelId: string,
+    links: CertificateChannelLink[],
+    actor: AuditActor
+  ): Promise<void> {
+    if (!links.length) {
+      return;
+    }
+
+    await Promise.all(
+      links.map((link) =>
+        this.auditService.record({
+          actorUserId: actor.id,
+          actorEmail: actor.email,
+          entity: 'certificate',
+          entityId: link.certificateId,
+          action: 'channel_unlink',
+          diff: {
+            channelIds: { old: link.channelId, new: null }
+          },
+          note: `channel_id=${channelId}`,
+          ip: actor.ip,
+          userAgent: actor.userAgent
+        })
+      )
+    );
   }
 
   private extractEmailRecipient(input: Record<string, unknown>): string {

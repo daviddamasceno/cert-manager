@@ -24,7 +24,7 @@ export const updateChannel = async (id: string, payload: ChannelPayload): Promis
   return data;
 };
 
-export const disableChannel = async (id: string): Promise<void> => {
+export const deleteChannel = async (id: string): Promise<void> => {
   await api.delete(`/channels/${id}`);
 };
 
