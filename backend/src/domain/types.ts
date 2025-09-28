@@ -80,12 +80,35 @@ export interface AuditLog {
   note?: string;
 }
 
+export type UserStatus = 'active' | 'inactive';
+
 export interface User {
   id: string;
   email: string;
   name: string;
   role: 'admin' | 'viewer';
+  status: UserStatus;
   createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
+export interface UserCredentials {
+  userId: string;
+  passwordHash: string;
+  passwordUpdatedAt: string;
+  passwordNeedsReset: boolean;
+}
+
+export interface RefreshTokenRecord {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  issuedAt: string;
+  expiresAt: string;
+  userAgent?: string;
+  ip?: string;
+  revoked: boolean;
 }
 
 export interface NotificationContext {
