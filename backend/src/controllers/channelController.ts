@@ -80,12 +80,19 @@ channelController.post(
   async (req: AuthenticatedRequest, res) => {
     const actor = req.user ?? { id: 'system', email: 'system@local' };
     try {
-      const { to } = req.body || {};
-      if (!to || typeof to !== 'string') {
-        res.status(400).json({ message: 'Parâmetro to (destinatário) obrigatório' });
+      const { to, to_email: toEmail } = req.body || {};
+      const recipientRaw = typeof to === 'string' && to.trim().length > 0
+        ? to.trim()
+        : typeof toEmail === 'string' && toEmail.trim().length > 0
+          ? toEmail.trim()
+          : null;
+
+      if (!recipientRaw) {
+        res.status(400).json({ message: 'Parâmetro to_email obrigatório' });
         return;
       }
-      const result = await channelService.testChannel(req.params.id, { to }, actor);
+
+      const result = await channelService.testChannel(req.params.id, { to: recipientRaw }, actor);
       res.json(result);
     } catch (error) {
       res.status(400).json({ message: String(error) });

@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import dayjs from 'dayjs';
 import { useToast } from '../context/ToastContext';
 import { ChannelSummary, ChannelType } from '../types';
-import { createChannel, disableChannel, listChannels, updateChannel } from '../services/channels';
+import { createChannel, disableChannel, listChannels, testChannel, updateChannel } from '../services/channels';
 
 interface FormValues {
   name: string;
@@ -64,7 +64,11 @@ const defaultValues: FormValues = {
   name: '',
   type: 'email_smtp',
   enabled: true,
-  params: {},
+  params: {
+    smtp_port: '587',
+    tls: 'on',
+    timeout_ms: '15000'
+  },
   secrets: {}
 };
 
@@ -74,6 +78,8 @@ const ChannelsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<ChannelSummary | null>(null);
   const [existingSecrets, setExistingSecrets] = useState<Record<string, boolean>>({});
+  const [testEmail, setTestEmail] = useState('');
+  const [testing, setTesting] = useState(false);
   const { notify } = useToast();
 
   const { register, handleSubmit, reset, watch, setValue } = useForm<FormValues>({
@@ -82,10 +88,12 @@ const ChannelsPage: React.FC = () => {
 
   useEffect(() => {
     register('enabled');
+    register('params.tls');
   }, [register]);
 
   const selectedType = watch('type');
   const enabled = watch('enabled');
+  const tlsEnabled = watch('params.tls') === 'on';
 
   const fetchChannels = async () => {
     setLoading(true);
@@ -107,6 +115,8 @@ const ChannelsPage: React.FC = () => {
     setExistingSecrets({});
     reset({ ...defaultValues });
     setSelectedChannel(null);
+    setTestEmail('');
+    setTesting(false);
     setModalOpen(true);
   };
 
@@ -122,6 +132,9 @@ const ChannelsPage: React.FC = () => {
       params: summary.params,
       secrets: Object.fromEntries(summary.secrets.map((secret) => [secret.key, '']))
     });
+    setValue('params.tls', summary.params.tls === 'off' ? 'off' : 'on', { shouldDirty: false });
+    setTestEmail(summary.params.from_email || '');
+    setTesting(false);
     setModalOpen(true);
   };
 
@@ -181,6 +194,40 @@ const ChannelsPage: React.FC = () => {
         .map(([key]) => key),
     [existingSecrets]
   );
+
+  const handleTlsToggle = (checked: boolean) => {
+    setValue('params.tls', checked ? 'on' : 'off', { shouldDirty: true });
+  };
+
+  const handleTestSmtp = async () => {
+    if (!selectedChannel) {
+      return;
+    }
+
+    const recipient = testEmail.trim();
+    if (!recipient) {
+      notify({ type: 'info', title: 'Informe um destinatário para o teste' });
+      return;
+    }
+
+    try {
+      setTesting(true);
+      const result = await testChannel(selectedChannel.channel.id, { to_email: recipient });
+      if (result.success) {
+        notify({ type: 'success', title: 'Teste SMTP enviado', description: `Mensagem enviada para ${recipient}` });
+      } else {
+        const description = result.error || 'O servidor SMTP retornou uma falha.';
+        notify({ type: 'error', title: 'Teste SMTP falhou', description });
+      }
+    } catch (error) {
+      const description =
+        (error as any)?.response?.data?.message ||
+        (error instanceof Error ? error.message : 'Não foi possível executar o teste SMTP.');
+      notify({ type: 'error', title: 'Teste SMTP falhou', description });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -353,17 +400,45 @@ const ChannelsPage: React.FC = () => {
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Parâmetros</h3>
-                      {typeDefinition.params.map((field) => (
-                        <div key={field.key}>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">{field.label}</label>
-                          <input
-                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                            type={field.type === 'number' ? 'number' : 'text'}
-                            placeholder={field.placeholder}
-                            {...register(`params.${field.key}` as const)}
-                          />
-                        </div>
-                      ))}
+                      {typeDefinition.params.map((field) => {
+                        if (selectedType === 'email_smtp' && field.key === 'tls') {
+                          return (
+                            <div key={field.key} className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+                              <div>
+                                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">TLS ativado</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Ao desligar, a conexão usará STARTTLS opcional.</p>
+                              </div>
+                              <Switch
+                                checked={tlsEnabled}
+                                onChange={handleTlsToggle}
+                                className={clsx(
+                                  tlsEnabled ? 'bg-primary-600' : 'bg-slate-200 dark:bg-slate-700',
+                                  'relative inline-flex h-6 w-11 items-center rounded-full transition'
+                                )}
+                              >
+                                <span
+                                  className={clsx(
+                                    tlsEnabled ? 'translate-x-6' : 'translate-x-1',
+                                    'inline-block h-4 w-4 transform rounded-full bg-white transition'
+                                  )}
+                                />
+                              </Switch>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={field.key}>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">{field.label}</label>
+                            <input
+                              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              type={field.type === 'number' ? 'number' : 'text'}
+                              placeholder={field.placeholder}
+                              {...register(`params.${field.key}` as const)}
+                            />
+                          </div>
+                        );
+                      })}
                     </section>
 
                     <section className="space-y-3">
@@ -385,6 +460,35 @@ const ChannelsPage: React.FC = () => {
                         </div>
                       ))}
                     </section>
+
+                    {selectedType === 'email_smtp' && selectedChannel && (
+                      <section className="space-y-3">
+                        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Teste SMTP</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Informe um destinatário temporário para validar a configuração. O teste respeita o rate limit da API.
+                        </p>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                          <input
+                            type="email"
+                            value={testEmail}
+                            onChange={(event) => setTestEmail(event.target.value)}
+                            placeholder="destinatario@exemplo.com"
+                            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleTestSmtp}
+                            disabled={testing}
+                            className={clsx(
+                              'inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900',
+                              testing ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+                            )}
+                          >
+                            {testing ? 'Testando...' : 'Testar SMTP'}
+                          </button>
+                        </div>
+                      </section>
+                    )}
 
                     <div className="flex justify-end space-x-2">
                       <button

@@ -334,24 +334,42 @@ export class ChannelService {
     const paramMap = this.composeParamMap(channel.type, params);
     const secretMap = new Map(secrets.map((secret) => [secret.key, secret.valueCiphertext]));
 
-    const host = paramMap['smtp_host'];
-    const port = Number(paramMap['smtp_port'] || 587);
-    const user = paramMap['smtp_user'];
-    const fromName = paramMap['from_name'] || 'Cert Manager';
-    const fromEmail = paramMap['from_email'] || user;
-    const tlsFlag = (paramMap['tls'] || '').toLowerCase();
-    const timeout = Number(paramMap['timeout_ms'] || 15000);
+    const sanitize = (value: string | undefined): string => value?.trim() ?? '';
+    const parsePositiveNumber = (value: string | undefined, fallback: number): number => {
+      if (!value) {
+        return fallback;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+
+    const host = sanitize(paramMap['smtp_host']);
+    const port = parsePositiveNumber(paramMap['smtp_port'], 587);
+    const user = sanitize(paramMap['smtp_user']);
+    const fromName = sanitize(paramMap['from_name']) || 'Cert Manager';
+    const fromEmail = sanitize(paramMap['from_email']) || user;
+    const tlsFlag = sanitize(paramMap['tls']).toLowerCase();
+    const timeout = parsePositiveNumber(paramMap['timeout_ms'], 15000);
     const encryptedPass = secretMap.get('smtp_pass');
     const pass = encryptedPass ? decryptSecret(encryptedPass) : undefined;
 
-    if (!host || !port || !fromEmail) {
-      throw new Error('Missing SMTP configuration (host/port/from_email)');
+    if (!host) {
+      throw new Error('Configuração SMTP ausente: host obrigatório');
     }
+    if (!port) {
+      throw new Error('Configuração SMTP ausente ou inválida: porta');
+    }
+    if (!fromEmail) {
+      throw new Error('Configuração SMTP ausente: from_email obrigatório');
+    }
+
+    const useTls = tlsFlag === 'on';
 
     const transporter = nodemailer.createTransport({
       host,
       port,
-      secure: tlsFlag === 'on' || port === 465,
+      secure: useTls || port === 465,
+      requireTLS: useTls,
       auth: user ? { user, pass } : undefined,
       connectionTimeout: timeout,
       greetingTimeout: timeout,

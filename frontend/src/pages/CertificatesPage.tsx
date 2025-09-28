@@ -37,7 +37,7 @@ const defaultFormValues: CertificateFormValues = {
   issuedAt: dayjs().format('YYYY-MM-DD'),
   expiresAt: dayjs().add(90, 'day').format('YYYY-MM-DD'),
   status: 'active',
-  alertModelId: undefined,
+  alertModelId: '',
   notes: '',
   channelIds: []
 };
@@ -110,7 +110,7 @@ const CertificatesPage: React.FC = () => {
   }, []);
 
   const openModalForCreate = () => {
-    reset(defaultFormValues);
+    reset({ ...defaultFormValues });
     setSelectedCertificate(null);
     setModalOpen(true);
   };
@@ -119,12 +119,12 @@ const CertificatesPage: React.FC = () => {
     reset({
       name: certificate.name,
       ownerEmail: certificate.ownerEmail,
-      issuedAt: certificate.issuedAt,
-      expiresAt: certificate.expiresAt,
+      issuedAt: certificate.issuedAt ? dayjs(certificate.issuedAt).format('YYYY-MM-DD') : '',
+      expiresAt: certificate.expiresAt ? dayjs(certificate.expiresAt).format('YYYY-MM-DD') : '',
       status: certificate.status,
-      alertModelId: certificate.alertModelId,
-      notes: certificate.notes,
-      channelIds: certificate.channelIds
+      alertModelId: certificate.alertModelId ?? '',
+      notes: certificate.notes ?? '',
+      channelIds: certificate.channelIds ?? []
     });
     setSelectedCertificate(certificate);
     setModalOpen(true);
@@ -138,8 +138,8 @@ const CertificatesPage: React.FC = () => {
         issuedAt: values.issuedAt,
         expiresAt: values.expiresAt,
         status: values.status,
-        alertModelId: values.alertModelId,
-        notes: values.notes,
+        alertModelId: values.alertModelId ? values.alertModelId : undefined,
+        notes: values.notes?.trim() ? values.notes : undefined,
         channelIds: values.channelIds
       };
 
@@ -271,7 +271,7 @@ const CertificatesPage: React.FC = () => {
                       <div className="flex items-center space-x-2">
                         <button
                           type="button"
-                          onClick={() => openEditModal(certificate)}
+                          onClick={() => openModalForEdit(certificate)}
                           className="inline-flex items-center rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                         >
                           <PencilSquareIcon className="mr-1 h-4 w-4" /> Editar
