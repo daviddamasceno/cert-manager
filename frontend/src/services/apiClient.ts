@@ -19,6 +19,15 @@ export const withAuth = <T>(config: AxiosRequestConfig<T> = {}): AxiosRequestCon
   ...config
 });
 
+type RetriableConfig = AxiosRequestConfig & { _retry?: boolean };
+
+const isAuthRoute = (config?: AxiosRequestConfig): boolean => {
+  if (!config?.url) {
+    return false;
+  }
+  return config.url.includes('/auth/login') || config.url.includes('/auth/refresh') || config.url.includes('/auth/logout');
+};
+
 export const attachAuthInterceptor = (refresh: () => Promise<string | null>): void => {
   let isRefreshing = false;
   let queue: Array<(token: string | null) => void> = [];
@@ -27,7 +36,9 @@ export const attachAuthInterceptor = (refresh: () => Promise<string | null>): vo
     (response) => response,
     async (error) => {
       const status = error.response?.status;
-      if (status !== 401) {
+      const originalConfig = error.config as RetriableConfig | undefined;
+
+      if (status !== 401 || !originalConfig || originalConfig._retry || isAuthRoute(originalConfig)) {
         return Promise.reject(error);
       }
 
@@ -38,8 +49,10 @@ export const attachAuthInterceptor = (refresh: () => Promise<string | null>): vo
               reject(error);
               return;
             }
-            error.config.headers.Authorization = `Bearer ${token}`;
-            resolve(api.request(error.config));
+            originalConfig._retry = true;
+            originalConfig.headers = originalConfig.headers ?? {};
+            originalConfig.headers.Authorization = `Bearer ${token}`;
+            resolve(api.request(originalConfig));
           });
         });
       }
@@ -52,8 +65,10 @@ export const attachAuthInterceptor = (refresh: () => Promise<string | null>): vo
         if (!newToken) {
           return Promise.reject(error);
         }
-        error.config.headers.Authorization = `Bearer ${newToken}`;
-        return api.request(error.config);
+        originalConfig._retry = true;
+        originalConfig.headers = originalConfig.headers ?? {};
+        originalConfig.headers.Authorization = `Bearer ${newToken}`;
+        return api.request(originalConfig);
       } catch (refreshError) {
         queue.forEach((callback) => callback(null));
         queue = [];
