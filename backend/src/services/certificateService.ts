@@ -9,6 +9,8 @@ import { CertificateRepository, ChannelRepository } from '../repositories/interf
 import { AuditService } from './auditService';
 import { normalizeEmailList, sanitizeString } from '../utils/validators';
 
+const DISABLED_ALERT_MODEL_ID = 'disabled';
+
 export interface CertificateInput {
   name: string;
   ownerEmail: string;
@@ -101,7 +103,8 @@ export class CertificateService {
     if (input.status !== undefined) {
       sanitizedUpdates.status = this.parseStatus(input.status, current.status);
     }
-    if (input.alertModelId !== undefined) {
+    const alertModelIdProvided = input.alertModelId !== undefined;
+    if (alertModelIdProvided) {
       sanitizedUpdates.alertModelId = this.normalizeOptionalString(input.alertModelId);
     }
     if (input.notes !== undefined) {
@@ -134,6 +137,19 @@ export class CertificateService {
     if (channelIdsToSync !== undefined) {
       diff.channelIds = { old: current.channelIds, new: channelIdsToSync };
     }
+    if (alertModelIdProvided && sanitizedUpdates.alertModelId !== current.alertModelId) {
+      diff.alertModelId = { old: current.alertModelId, new: sanitizedUpdates.alertModelId };
+    }
+
+    let note: string | undefined;
+    if (
+      alertModelIdProvided &&
+      sanitizedUpdates.alertModelId === DISABLED_ALERT_MODEL_ID &&
+      current.alertModelId !== DISABLED_ALERT_MODEL_ID
+    ) {
+      note = 'Modelo de alerta configurado como desabilitado para este certificado.';
+    }
+
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
@@ -142,7 +158,8 @@ export class CertificateService {
       action: 'update',
       diff,
       ip: actor.ip,
-      userAgent: actor.userAgent
+      userAgent: actor.userAgent,
+      note
     });
 
     return updated;

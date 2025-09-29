@@ -33,13 +33,11 @@ export const startScheduler = (): void => {
   initializeServices();
   void writeSchedulerHeartbeat('idle');
 
-  cron.schedule(config.scheduler.hourlyCron, () => {
-    logger.info('Executing hourly scheduler job');
-    void runSchedulerOnce();
-  });
+  const interval = config.scheduler.intervalMinutes;
+  const cronExpression = interval === 1 ? '* * * * *' : `*/${interval} * * * *`;
 
-  cron.schedule(config.scheduler.dailyCron, () => {
-    logger.info('Executing daily scheduler job');
+  cron.schedule(cronExpression, () => {
+    logger.info({ intervalMinutes: interval }, 'Executing scheduler job tick');
     void runSchedulerOnce();
   });
 

@@ -31,7 +31,10 @@ const HEADERS: HeaderMap = {
     'offset_days_after',
     'repeat_every_days',
     'template_subject',
-    'template_body'
+    'template_body',
+    'schedule_type',
+    'schedule_time',
+    'enabled'
   ],
   channels: ['id', 'name', 'type', 'enabled', 'created_at', 'updated_at'],
   channel_params: ['channel_id', 'key', 'value', 'updated_at'],

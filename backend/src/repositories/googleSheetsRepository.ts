@@ -59,7 +59,10 @@ const HEADERS: Record<string, string[]> = {
     'offset_days_after',
     'repeat_every_days',
     'template_subject',
-    'template_body'
+    'template_body',
+    'schedule_type',
+    'schedule_time',
+    'enabled'
   ],
   [SHEET_CHANNELS]: ['id', 'name', 'type', 'enabled', 'deleted', 'created_at', 'updated_at'],
   [SHEET_CHANNEL_PARAMS]: ['channel_id', 'key', 'value', 'updated_at'],
@@ -457,6 +460,9 @@ export class GoogleSheetsRepository
     const { header, rows } = await this.readSheetWithHeader(SHEET_ALERT_MODELS, HEADERS[SHEET_ALERT_MODELS]);
     return rows.map((row) => {
       const map = this.mapRow(header, row);
+      const scheduleType = (map['schedule_type'] || 'hourly').toLowerCase() === 'daily' ? 'daily' : 'hourly';
+      const scheduleTime = map['schedule_time']?.trim() || null;
+      const enabled = (map['enabled'] ?? 'true').toLowerCase() !== 'false';
       return {
         id: map['id'] || uuid(),
         name: map['name'] || '',
@@ -464,7 +470,10 @@ export class GoogleSheetsRepository
         offsetDaysAfter: map['offset_days_after'] ? Number(map['offset_days_after']) : undefined,
         repeatEveryDays: map['repeat_every_days'] ? Number(map['repeat_every_days']) : undefined,
         templateSubject: map['template_subject'] || '',
-        templateBody: map['template_body'] || ''
+        templateBody: map['template_body'] || '',
+        scheduleType,
+        scheduleTime,
+        enabled
       };
     });
   }
@@ -482,7 +491,10 @@ export class GoogleSheetsRepository
       model.offsetDaysAfter?.toString() || '',
       model.repeatEveryDays?.toString() || '',
       model.templateSubject,
-      model.templateBody
+      model.templateBody,
+      model.scheduleType,
+      model.scheduleType === 'daily' ? model.scheduleTime ?? '' : '',
+      model.enabled ? 'true' : 'false'
     ]);
   }
 
@@ -504,7 +516,19 @@ export class GoogleSheetsRepository
         offsetDaysAfter: input.offsetDaysAfter ?? (map['offset_days_after'] ? Number(map['offset_days_after']) : undefined),
         repeatEveryDays: input.repeatEveryDays ?? (map['repeat_every_days'] ? Number(map['repeat_every_days']) : undefined),
         templateSubject: input.templateSubject ?? map['template_subject'] ?? '',
-        templateBody: input.templateBody ?? map['template_body'] ?? ''
+        templateBody: input.templateBody ?? map['template_body'] ?? '',
+        scheduleType:
+          input.scheduleType ?? ((map['schedule_type'] || 'hourly').toLowerCase() === 'daily' ? 'daily' : 'hourly'),
+        scheduleTime:
+          input.scheduleType === 'daily'
+            ? input.scheduleTime ?? (map['schedule_time']?.trim() || null)
+            : input.scheduleType === 'hourly'
+            ? null
+            : input.scheduleTime ?? (map['schedule_time']?.trim() || null),
+        enabled:
+          input.enabled !== undefined
+            ? input.enabled
+            : (map['enabled'] ?? 'true').toLowerCase() !== 'false'
       };
 
       updated = merged;
@@ -516,7 +540,10 @@ export class GoogleSheetsRepository
         merged.offsetDaysAfter?.toString() || '',
         merged.repeatEveryDays?.toString() || '',
         merged.templateSubject,
-        merged.templateBody
+        merged.templateBody,
+        merged.scheduleType,
+        merged.scheduleType === 'daily' ? merged.scheduleTime ?? '' : '',
+        merged.enabled ? 'true' : 'false'
       ];
     });
 

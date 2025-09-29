@@ -429,6 +429,7 @@ const CertificatesPage: React.FC = () => {
                           {...register('alertModelId')}
                         >
                           <option value="">Selecionar modelo</option>
+                          <option value="disabled">Desabilitado</option>
                           {alertModels.map((model) => (
                             <option key={model.id} value={model.id}>
                               {model.name}

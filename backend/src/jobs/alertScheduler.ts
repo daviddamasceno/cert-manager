@@ -5,6 +5,8 @@ import { CertificateService } from '../services/certificateService';
 import { NotificationService } from '../services/notificationService';
 import { AlertModel } from '../domain/types';
 
+const DISABLED_ALERT_MODEL_ID = 'disabled';
+
 export class AlertSchedulerJob {
   constructor(
     private readonly certificateService: CertificateService,
@@ -23,13 +25,21 @@ export class AlertSchedulerJob {
     const alertMap = new Map(alertModels.map((model) => [model.id, model]));
 
     for (const certificate of certificates) {
-      if (!certificate.alertModelId) {
+      if (!certificate.alertModelId || certificate.alertModelId === DISABLED_ALERT_MODEL_ID) {
         continue;
       }
 
       const model = alertMap.get(certificate.alertModelId);
       if (!model) {
         logger.warn({ certificate: certificate.id }, 'Alert model not found for certificate');
+        continue;
+      }
+
+      if (!model.enabled) {
+        continue;
+      }
+
+      if (!this.shouldRunNow(model)) {
         continue;
       }
 
@@ -57,6 +67,26 @@ export class AlertSchedulerJob {
         }
       }
     }
+  }
+
+  private shouldRunNow(model: AlertModel): boolean {
+    const current = now();
+
+    if (model.scheduleType === 'hourly') {
+      return current.minute === 0;
+    }
+
+    if (model.scheduleType === 'daily') {
+      if (!model.scheduleTime) {
+        return false;
+      }
+      const [hourStr, minuteStr] = model.scheduleTime.split(':');
+      const hour = Number.parseInt(hourStr, 10);
+      const minute = Number.parseInt(minuteStr, 10);
+      return current.hour === hour && current.minute === minute;
+    }
+
+    return false;
   }
 
   private shouldSendNotification(daysLeft: number, model: AlertModel): boolean {
