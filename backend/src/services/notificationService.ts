@@ -50,7 +50,9 @@ export class NotificationService {
     daysLeft: number,
     actor: AuditActor
   ): Promise<void> {
-    if (!certificate.channelIds.length) {
+    const uniqueChannelIds = Array.from(new Set(certificate.channelIds));
+
+    if (!uniqueChannelIds.length) {
       logger.warn({ certificate: certificate.id }, 'No channel instances linked to certificate');
       await this.auditService.record({
         actorUserId: actor.id,
@@ -75,7 +77,7 @@ export class NotificationService {
 
     const results: Array<{ channelId: string; outcome: ChannelNotificationResult | null; error?: string }> = [];
 
-    for (const channelId of certificate.channelIds) {
+    for (const channelId of uniqueChannelIds) {
       const payload: ChannelNotificationPayload = {
         subject,
         message: body,
@@ -121,7 +123,7 @@ export class NotificationService {
       entityId: certificate.id,
       action: 'notification_sent',
       diff: {
-        channelIds: { new: certificate.channelIds }
+        channelIds: { new: uniqueChannelIds }
       },
       note: noteParts.join(' | '),
       ip: actor.ip,

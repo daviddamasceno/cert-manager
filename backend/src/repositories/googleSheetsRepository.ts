@@ -317,6 +317,11 @@ export class GoogleSheetsRepository
     const { header, rows } = await this.readSheetWithHeader(SHEET_CERTIFICATES, HEADERS[SHEET_CERTIFICATES]);
     return rows.map((row) => {
       const map = this.mapRow(header, row);
+      const rawChannelIds = map['channel_ids']
+        ? map['channel_ids'].split(',').map((c) => c.trim()).filter(Boolean)
+        : [];
+      const channelIds = Array.from(new Set(rawChannelIds));
+
       return {
         id: map['id'] || uuid(),
         name: map['name'] || '',
@@ -326,7 +331,7 @@ export class GoogleSheetsRepository
         status: (map['status'] as Certificate['status']) || 'active',
         alertModelId: map['alert_model_id'] || undefined,
         notes: map['notes'] || undefined,
-        channelIds: map['channel_ids'] ? map['channel_ids'].split(',').map((c) => c.trim()).filter(Boolean) : []
+        channelIds
       };
     });
   }
@@ -361,6 +366,13 @@ export class GoogleSheetsRepository
         return row;
       }
 
+      const existingChannelIds = map['channel_ids']
+        ? map['channel_ids'].split(',').map((c) => c.trim()).filter(Boolean)
+        : [];
+      const mergedChannelIds = Array.from(
+        new Set(input.channelIds ?? existingChannelIds)
+      );
+
       const merged: Certificate = {
         id,
         name: input.name ?? map['name'] ?? '',
@@ -370,8 +382,7 @@ export class GoogleSheetsRepository
         status: (input.status as Certificate['status']) ?? (map['status'] as Certificate['status']) ?? 'active',
         alertModelId: input.alertModelId ?? (map['alert_model_id'] || undefined),
         notes: input.notes ?? (map['notes'] || undefined),
-        channelIds:
-          input.channelIds ?? (map['channel_ids'] ? map['channel_ids'].split(',').map((c) => c.trim()).filter(Boolean) : [])
+        channelIds: mergedChannelIds
       };
 
       updated = merged;
