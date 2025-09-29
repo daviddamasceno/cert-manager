@@ -78,13 +78,16 @@ const SettingsPage: React.FC = () => {
               </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500 dark:text-slate-400">Cron horário</dt>
-              <dd className="font-mono text-slate-700 dark:text-slate-200">{settings.scheduler.hourlyCron}</dd>
+              <dt className="text-slate-500 dark:text-slate-400">Intervalo base</dt>
+              <dd className="text-slate-700 dark:text-slate-200">
+                {settings.scheduler.baseIntervalMinutes === 1
+                  ? 'A cada minuto'
+                  : `A cada ${settings.scheduler.baseIntervalMinutes} minutos`}
+              </dd>
             </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-slate-500 dark:text-slate-400">Cron diário</dt>
-              <dd className="font-mono text-slate-700 dark:text-slate-200">{settings.scheduler.dailyCron}</dd>
-            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              A frequência exata é definida em cada modelo de alerta (hora em hora ou em um horário específico).
+            </p>
             <div className="flex items-center justify-between">
               <dt className="text-slate-500 dark:text-slate-400">Fuso horário padrão</dt>
               <dd className="text-slate-700 dark:text-slate-200">{settings.timezone}</dd>

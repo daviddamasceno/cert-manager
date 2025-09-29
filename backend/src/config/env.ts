@@ -20,8 +20,7 @@ export interface AppConfig {
   encryptionKey: string;
   scheduler: {
     enabled: boolean;
-    hourlyCron: string;
-    dailyCron: string;
+    baseIntervalMinutes: number;
   };
   metrics: {
     enabled: boolean;
@@ -96,8 +95,7 @@ const config: AppConfig = {
   encryptionKey: required(process.env.ENCRYPTION_KEY, 'ENCRYPTION_KEY'),
   scheduler: {
     enabled: (process.env.SCHEDULER_ENABLED || 'false').toLowerCase() === 'true',
-    hourlyCron: process.env.SCHEDULER_HOURLY_CRON || '0 * * * *',
-    dailyCron: process.env.SCHEDULER_DAILY_CRON || '0 6 * * *'
+    baseIntervalMinutes: 1
   },
   metrics: {
     enabled: (process.env.METRICS_ENABLED || 'true').toLowerCase() === 'true'

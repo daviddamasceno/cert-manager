@@ -10,7 +10,62 @@ export interface AlertModelInput {
   repeatEveryDays?: number;
   templateSubject: string;
   templateBody: string;
+  scheduleType?: 'hourly' | 'daily';
+  scheduleTime?: string;
+  enabled?: boolean;
 }
+
+const HH_MM_REGEX = /^(\d{2}):(\d{2})$/;
+
+const normalizeScheduleType = (value?: string): 'hourly' | 'daily' => {
+  if (value === 'hourly' || value === 'daily') {
+    return value;
+  }
+  return 'hourly';
+};
+
+const normalizeScheduleTime = (type: 'hourly' | 'daily', value?: string): string | undefined => {
+  if (type === 'hourly') {
+    return undefined;
+  }
+
+  if (!value) {
+    throw new Error('Informe o horário no formato HH:mm.');
+  }
+
+  const match = HH_MM_REGEX.exec(value.trim());
+  if (!match) {
+    throw new Error('O horário deve estar no formato HH:mm.');
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    throw new Error('O horário deve ser válido entre 00:00 e 23:59.');
+  }
+
+  return `${match[1].padStart(2, '0')}:${match[2].padStart(2, '0')}`;
+};
+
+const normalizeEnabled = (value: unknown, fallback: boolean): boolean => {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return Boolean(value);
+};
 
 export class AlertModelService {
   constructor(
@@ -27,9 +82,16 @@ export class AlertModelService {
   }
 
   async create(input: AlertModelInput, actor: AuditActor): Promise<AlertModel> {
+    const scheduleType = normalizeScheduleType(input.scheduleType);
+    const scheduleTime = normalizeScheduleTime(scheduleType, input.scheduleTime);
+    const enabled = normalizeEnabled(input.enabled, true);
+
     const model: AlertModel = {
       id: uuid(),
-      ...input
+      ...input,
+      scheduleType,
+      scheduleTime,
+      enabled
     };
 
     await this.repository.createAlertModel(model);
@@ -45,7 +107,10 @@ export class AlertModelService {
         offsetDaysAfter: { new: model.offsetDaysAfter },
         repeatEveryDays: { new: model.repeatEveryDays },
         templateSubject: { new: model.templateSubject },
-        templateBody: { new: model.templateBody }
+        templateBody: { new: model.templateBody },
+        scheduleType: { new: model.scheduleType },
+        scheduleTime: { new: model.scheduleTime },
+        enabled: { new: model.enabled }
       },
       ip: actor.ip,
       userAgent: actor.userAgent
@@ -59,7 +124,20 @@ export class AlertModelService {
       throw new Error('Modelo de alerta não encontrado.');
     }
 
-    const updated = await this.repository.updateAlertModel(id, input);
+    const scheduleType =
+      input.scheduleType !== undefined ? normalizeScheduleType(input.scheduleType) : current.scheduleType;
+    const scheduleTime =
+      input.scheduleTime !== undefined ? normalizeScheduleTime(scheduleType, input.scheduleTime) : current.scheduleTime;
+    const enabled = normalizeEnabled(input.enabled, current.enabled);
+
+    const payload: Partial<AlertModel> = {
+      ...input,
+      scheduleType,
+      scheduleTime,
+      enabled
+    };
+
+    const updated = await this.repository.updateAlertModel(id, payload);
     const diff: Record<string, { old?: unknown; new?: unknown }> = {};
 
     if (input.name !== undefined && input.name !== current.name) {
@@ -85,6 +163,15 @@ export class AlertModelService {
     }
     if (input.templateBody !== undefined && input.templateBody !== current.templateBody) {
       diff.templateBody = { old: current.templateBody, new: updated.templateBody };
+    }
+    if (scheduleType !== current.scheduleType) {
+      diff.scheduleType = { old: current.scheduleType, new: scheduleType };
+    }
+    if (scheduleTime !== current.scheduleTime) {
+      diff.scheduleTime = { old: current.scheduleTime, new: scheduleTime };
+    }
+    if (enabled !== current.enabled) {
+      diff.enabled = { old: current.enabled, new: enabled };
     }
 
     await this.auditService.record({

@@ -9,6 +9,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "scheduler": "node dist/scheduler.js",
     "seed:sheets": "ts-node --project tsconfig.json scripts/seedSheets.ts",
+    "sheets:update-alert-model-schedule": "ts-node --project tsconfig.json scripts/updateAlertModelSchedule.ts",
     "test": "ts-node --project tsconfig.json tests/crypto.test.ts"
   },
   "dependencies": {

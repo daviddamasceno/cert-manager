@@ -36,6 +36,9 @@ export interface AlertModel {
   repeatEveryDays?: number;
   templateSubject: string;
   templateBody: string;
+  scheduleType: 'hourly' | 'daily';
+  scheduleTime?: string;
+  enabled: boolean;
 }
 
 export interface ChannelInstance {
@@ -71,10 +74,11 @@ export interface SettingsResponse {
   timezone: string;
   scheduler: {
     enabled: boolean;
-    hourlyCron: string;
-    dailyCron: string;
+    baseIntervalMinutes: number;
   };
   sheets: {
     spreadsheetId: string;
   };
 }
+
+export const DISABLED_ALERT_MODEL_ID = 'disabled';

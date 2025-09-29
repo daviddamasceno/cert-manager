@@ -3,7 +3,8 @@ import { parseDate, now } from '../utils/time';
 import { AlertModelService } from '../services/alertModelService';
 import { CertificateService } from '../services/certificateService';
 import { NotificationService } from '../services/notificationService';
-import { AlertModel } from '../domain/types';
+import { AlertModel, DISABLED_ALERT_MODEL_ID } from '../domain/types';
+import { DateTime } from 'luxon';
 
 export class AlertSchedulerJob {
   constructor(
@@ -22,14 +23,25 @@ export class AlertSchedulerJob {
 
     const alertMap = new Map(alertModels.map((model) => [model.id, model]));
 
+    const executionTime = now();
+
     for (const certificate of certificates) {
-      if (!certificate.alertModelId) {
+      if (!certificate.alertModelId || certificate.alertModelId === DISABLED_ALERT_MODEL_ID) {
         continue;
       }
 
       const model = alertMap.get(certificate.alertModelId);
       if (!model) {
         logger.warn({ certificate: certificate.id }, 'Alert model not found for certificate');
+        continue;
+      }
+
+      if (!model.enabled) {
+        logger.debug({ model: model.id, certificate: certificate.id }, 'Skipping disabled alert model');
+        continue;
+      }
+
+      if (!this.shouldExecuteForSchedule(model, executionTime)) {
         continue;
       }
 
@@ -57,6 +69,27 @@ export class AlertSchedulerJob {
         }
       }
     }
+  }
+
+  private shouldExecuteForSchedule(model: AlertModel, executionTime: DateTime): boolean {
+    if (model.scheduleType === 'hourly') {
+      return executionTime.minute === 0;
+    }
+
+    if (!model.scheduleTime) {
+      logger.warn({ model: model.id }, 'Daily schedule configured without a valid time');
+      return false;
+    }
+
+    const [hourStr, minuteStr] = model.scheduleTime.split(':');
+    const hour = Number(hourStr);
+    const minute = Number(minuteStr);
+    if (Number.isNaN(hour) || Number.isNaN(minute)) {
+      logger.warn({ model: model.id }, 'Invalid daily schedule time format');
+      return false;
+    }
+
+    return executionTime.hour === hour && executionTime.minute === minute;
   }
 
   private shouldSendNotification(daysLeft: number, model: AlertModel): boolean {

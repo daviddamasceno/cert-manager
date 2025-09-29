@@ -22,14 +22,25 @@ scripts/   Utilitários (ex.: seed do Google Sheets)
 | Aba | Cabeçalhos |
 | --- | --- |
 | `certificates` | `id`, `name`, `owner_email`, `issued_at`, `expires_at`, `status`, `alert_model_id`, `notes`, `channel_ids` |
-| `alert_models` | `id`, `name`, `offset_days_before`, `offset_days_after`, `repeat_every_days`, `template_subject`, `template_body` |
+| `alert_models` | `id`, `name`, `offset_days_before`, `offset_days_after`, `repeat_every_days`, `template_subject`, `template_body`, `schedule_type`, `schedule_time`, `enabled` |
 | `channels` | `id`, `name`, `type`, `enabled`, `created_at`, `updated_at` |
 | `channel_params` | `channel_id`, `key`, `value`, `updated_at` |
 | `channel_secrets` | `channel_id`, `key`, `value_ciphertext`, `updated_at` |
 | `certificate_channels` | `certificate_id`, `channel_id`, `linked_at`, `linked_by_user_id` |
 | `audit_logs` | `timestamp`, `actor_user_id`, `actor_email`, `entity`, `entity_id`, `action`, `diff_json`, `ip`, `user_agent`, `note` |
 
-> As abas `certificates` e `alert_models` continuam compatíveis com dados antigos (apenas adicionamos `channel_ids`).
+> As abas `certificates` e `alert_models` continuam compatíveis com dados antigos (novos campos são adicionados automaticamente pelo script de atualização).
+
+## Migração dos modelos de alerta para agendamentos
+Execute a rotina abaixo para incluir os campos `schedule_type`, `schedule_time` e `enabled` na planilha existente e preencher os valores padrão (`hourly`/`true`):
+
+```bash
+cd backend
+npm install
+npm run sheets:update-alert-model-schedule
+```
+
+O script ajusta o cabeçalho da aba `alert_models`, garante que os novos campos existam em todas as linhas e mantém os dados já cadastrados.
 
 ## Service Account e permissões
 1. No Google Cloud, crie um projeto e habilite a Sheets API.
@@ -56,7 +67,7 @@ scripts/   Utilitários (ex.: seed do Google Sheets)
 | `ENCRYPTION_KEY` | Chave AES-256 (32 bytes Base64) usada para criptografar segredos de canais. |
 | `CACHE_TTL_SECONDS` | TTL do cache in-memory dos repositórios. |
 | `TZ` | Fuso horário padrão da aplicação/scheduler. |
-| `SCHEDULER_ENABLED` / `SCHEDULER_*_CRON` | Ativação e cron expressions do scheduler. |
+| `SCHEDULER_ENABLED` | Ativa ou desativa o worker responsável por processar os modelos de alerta. |
 | `METRICS_ENABLED` | Expõe (`true`) ou oculta (`false`) o endpoint `/api/metrics`. |
 | `LOG_LEVEL` | Nível de log (ex.: `info`, `debug`). |
 | `RATE_LIMIT_TEST_WINDOW_MS` / `RATE_LIMIT_TEST_MAX` | Janela e limite para testes de canais (`/test`). |

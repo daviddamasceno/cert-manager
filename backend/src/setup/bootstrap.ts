@@ -18,7 +18,10 @@ export const ensureDefaultAlertModel = async (): Promise<void> => {
       templateBody:
         'Olá,\n\nO certificado {{name}} irá expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renovação.\n\nEquipe Cert Manager.',
       offsetDaysAfter: undefined,
-      repeatEveryDays: 7
+      repeatEveryDays: 7,
+      scheduleType: 'hourly',
+      scheduleTime: undefined,
+      enabled: true
     },
     { id: 'system', email: 'system@local', ip: 'bootstrap', userAgent: 'bootstrap/setup' }
   );

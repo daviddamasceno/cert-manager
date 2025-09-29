@@ -9,7 +9,7 @@ import {
 } from '../services/certificates';
 import { listAlertModels } from '../services/alertModels';
 import { listChannels } from '../services/channels';
-import { AlertModel, Certificate, ChannelSummary, ChannelType } from '../types';
+import { AlertModel, Certificate, ChannelSummary, ChannelType, DISABLED_ALERT_MODEL_ID } from '../types';
 import { Dialog, Transition } from '@headlessui/react';
 import { PlusIcon, PencilSquareIcon, TrashIcon, PaperAirplaneIcon, TagIcon } from '@heroicons/react/24/outline';
 import dayjs from 'dayjs';
@@ -429,6 +429,7 @@ const CertificatesPage: React.FC = () => {
                           {...register('alertModelId')}
                         >
                           <option value="">Selecionar modelo</option>
+                          <option value={DISABLED_ALERT_MODEL_ID}>Desabilitado</option>
                           {alertModels.map((model) => (
                             <option key={model.id} value={model.id}>
                               {model.name}

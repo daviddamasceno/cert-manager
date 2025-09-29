@@ -3,7 +3,8 @@ import {
   AuditActor,
   Certificate,
   CertificateStatus,
-  CertificateChannelLink
+  CertificateChannelLink,
+  DISABLED_ALERT_MODEL_ID
 } from '../domain/types';
 import { CertificateRepository, ChannelRepository } from '../repositories/interfaces';
 import { AuditService } from './auditService';
@@ -60,13 +61,25 @@ export class CertificateService {
 
     await this.certificateRepository.createCertificate(certificate);
     await this.syncChannels(certificate.id, certificate.channelIds, actor);
+    const creationDiff: Record<string, { old?: unknown; new?: unknown }> = {
+      name: { new: certificate.name }
+    };
+    if (certificate.alertModelId) {
+      creationDiff.alertModelId = { new: certificate.alertModelId };
+    }
+    const creationNote =
+      certificate.alertModelId === DISABLED_ALERT_MODEL_ID
+        ? 'Modelo de alerta desabilitado para o certificado'
+        : undefined;
+
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
       entity: 'certificate',
       entityId: certificate.id,
       action: 'create',
-      diff: { name: { new: certificate.name } },
+      diff: creationDiff,
+      note: creationNote,
       ip: actor.ip,
       userAgent: actor.userAgent
     });
@@ -128,12 +141,30 @@ export class CertificateService {
     }
 
     const diff: Record<string, { old?: unknown; new?: unknown }> = {};
-    if (sanitizedUpdates.name) {
+    let note: string | undefined;
+
+    if (sanitizedUpdates.name && sanitizedUpdates.name !== current.name) {
       diff.name = { old: current.name, new: sanitizedUpdates.name };
+    }
+    if (sanitizedUpdates.ownerEmail && sanitizedUpdates.ownerEmail !== current.ownerEmail) {
+      diff.ownerEmail = { old: current.ownerEmail, new: sanitizedUpdates.ownerEmail };
+    }
+    if (sanitizedUpdates.status && sanitizedUpdates.status !== current.status) {
+      diff.status = { old: current.status, new: sanitizedUpdates.status };
+    }
+    if (sanitizedUpdates.expiresAt && sanitizedUpdates.expiresAt !== current.expiresAt) {
+      diff.expiresAt = { old: current.expiresAt, new: sanitizedUpdates.expiresAt };
+    }
+    if (sanitizedUpdates.alertModelId !== undefined && sanitizedUpdates.alertModelId !== current.alertModelId) {
+      diff.alertModelId = { old: current.alertModelId, new: sanitizedUpdates.alertModelId };
+      if (sanitizedUpdates.alertModelId === DISABLED_ALERT_MODEL_ID) {
+        note = 'Modelo de alerta desabilitado para o certificado';
+      }
     }
     if (channelIdsToSync !== undefined) {
       diff.channelIds = { old: current.channelIds, new: channelIdsToSync };
     }
+
     await this.auditService.record({
       actorUserId: actor.id,
       actorEmail: actor.email,
@@ -141,6 +172,7 @@ export class CertificateService {
       entityId: id,
       action: 'update',
       diff,
+      note,
       ip: actor.ip,
       userAgent: actor.userAgent
     });

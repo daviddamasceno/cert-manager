@@ -15,6 +15,9 @@ interface AlertModelFormValues {
   repeatEveryDays?: number;
   templateSubject: string;
   templateBody: string;
+  scheduleType: 'hourly' | 'daily';
+  scheduleTime?: string;
+  enabled: boolean;
 }
 
 const defaultValues: AlertModelFormValues = {
@@ -24,7 +27,10 @@ const defaultValues: AlertModelFormValues = {
   repeatEveryDays: undefined,
   templateSubject: 'Alerta: certificado {{name}} vence em {{days_left}} dias',
   templateBody:
-    'Olá,\n\nO certificado {{name}} irá expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renovação.\n\nEquipe Cert Manager.'
+    'Olá,\n\nO certificado {{name}} irá expirar em {{days_left}} dias ({{expires_at}}).\nPor favor, providencie a renovação.\n\nEquipe Cert Manager.',
+  scheduleType: 'hourly',
+  scheduleTime: '08:00',
+  enabled: true
 };
 
 const AlertModelsPage: React.FC = () => {
@@ -34,7 +40,9 @@ const AlertModelsPage: React.FC = () => {
   const { notify } = useToast();
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'editor';
-  const { register, handleSubmit, reset, formState } = useForm<AlertModelFormValues>({ defaultValues });
+  const { register, handleSubmit, reset, formState, watch } = useForm<AlertModelFormValues>({ defaultValues });
+  const scheduleType = watch('scheduleType');
+  const isDailySchedule = scheduleType === 'daily';
 
   const fetchData = async () => {
     const data = await listAlertModels();
@@ -64,7 +72,10 @@ const AlertModelsPage: React.FC = () => {
       offsetDaysAfter: model.offsetDaysAfter,
       repeatEveryDays: model.repeatEveryDays,
       templateSubject: model.templateSubject,
-      templateBody: model.templateBody
+      templateBody: model.templateBody,
+      scheduleType: model.scheduleType,
+      scheduleTime: model.scheduleType === 'daily' ? model.scheduleTime ?? '08:00' : '08:00',
+      enabled: model.enabled
     });
     setSelectedModel(model);
     setModalOpen(true);
@@ -75,7 +86,10 @@ const AlertModelsPage: React.FC = () => {
       const payload: Partial<AlertModel> = {
         ...values,
         offsetDaysAfter: Number.isFinite(values.offsetDaysAfter) ? values.offsetDaysAfter : undefined,
-        repeatEveryDays: Number.isFinite(values.repeatEveryDays) ? values.repeatEveryDays : undefined
+        repeatEveryDays: Number.isFinite(values.repeatEveryDays) ? values.repeatEveryDays : undefined,
+        scheduleType: values.scheduleType,
+        scheduleTime: values.scheduleType === 'daily' ? values.scheduleTime : undefined,
+        enabled: values.enabled
       };
 
       if (selectedModel) {
@@ -137,13 +151,15 @@ const AlertModelsPage: React.FC = () => {
               <th className="px-4 py-3">Antes (dias)</th>
               <th className="px-4 py-3">Depois (dias)</th>
               <th className="px-4 py-3">Repetição</th>
+              <th className="px-4 py-3">Agendamento</th>
+              <th className="px-4 py-3">Status</th>
               {canManage ? <th className="px-4 py-3">Ações</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {alertModels.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 5 : 4} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={canManage ? 7 : 6} className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
                   Nenhum modelo cadastrado.
                 </td>
               </tr>
@@ -154,6 +170,12 @@ const AlertModelsPage: React.FC = () => {
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.offsetDaysBefore}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.offsetDaysAfter ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.repeatEveryDays ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                    {model.scheduleType === 'hourly'
+                      ? 'A cada hora'
+                      : `Diariamente às ${model.scheduleTime ?? '—:—'}`}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{model.enabled ? 'Ativo' : 'Inativo'}</td>
                   {canManage ? (
                     <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
@@ -248,6 +270,64 @@ const AlertModelsPage: React.FC = () => {
                           className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                           {...register('repeatEveryDays', { valueAsNumber: true })}
                         />
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Agendamento</p>
+                      <div className="mt-3 space-y-3">
+                        <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
+                          <input
+                            type="radio"
+                            value="hourly"
+                            className="h-4 w-4 border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-900"
+                            {...register('scheduleType')}
+                          />
+                          Executar toda hora
+                        </label>
+                        <div className="space-y-3">
+                          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
+                            <input
+                              type="radio"
+                              value="daily"
+                              className="h-4 w-4 border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-900"
+                              {...register('scheduleType')}
+                            />
+                            Executar em um horário específico
+                          </label>
+                          {isDailySchedule ? (
+                            <div className="pl-6">
+                              <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">
+                                Horário (HH:mm)
+                              </label>
+                              <input
+                                type="time"
+                                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                {...register('scheduleTime', {
+                                  validate: (value) => {
+                                    if (!isDailySchedule) {
+                                      return true;
+                                    }
+                                    return value && value.length ? true : 'Informe o horário';
+                                  }
+                                })}
+                              />
+                              {formState.errors.scheduleTime ? (
+                                <span className="mt-1 block text-xs text-rose-500">
+                                  {formState.errors.scheduleTime.message}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-900 dark:text-primary-400"
+                            {...register('enabled')}
+                          />
+                          Modelo ativo
+                        </label>
                       </div>
                     </div>
 

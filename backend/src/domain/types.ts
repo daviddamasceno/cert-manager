@@ -41,6 +41,8 @@ export interface Certificate {
   channelIds: string[];
 }
 
+export const DISABLED_ALERT_MODEL_ID = 'disabled';
+
 export interface AlertModel {
   id: string;
   name: string;
@@ -49,6 +51,9 @@ export interface AlertModel {
   repeatEveryDays?: number;
   templateSubject: string;
   templateBody: string;
+  scheduleType: 'hourly' | 'daily';
+  scheduleTime?: string;
+  enabled: boolean;
 }
 
 export interface ChannelInstance {
