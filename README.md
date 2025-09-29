@@ -65,7 +65,7 @@ O script garante a criação das colunas `schedule_type`, `schedule_time` e `ena
 | `ENCRYPTION_KEY` | Chave AES-256 (32 bytes Base64) usada para criptografar segredos de canais. |
 | `CACHE_TTL_SECONDS` | TTL do cache in-memory dos repositórios. |
 | `TZ` | Fuso horário padrão da aplicação/scheduler. |
-| `SCHEDULER_ENABLED` / `SCHEDULER_INTERVAL_MINUTES` | Ativação e intervalo (em minutos) entre verificações do scheduler. |
+| `SCHEDULER_ENABLED` / `SCHEDULER_INTERVAL_MINUTES` | Ativa o worker. Para suportar horários diários personalizados o tick é fixo em 1 minuto (valores maiores são ignorados). |
 | `METRICS_ENABLED` | Expõe (`true`) ou oculta (`false`) o endpoint `/api/metrics`. |
 | `LOG_LEVEL` | Nível de log (ex.: `info`, `debug`). |
 | `RATE_LIMIT_TEST_WINDOW_MS` / `RATE_LIMIT_TEST_MAX` | Janela e limite para testes de canais (`/test`). |

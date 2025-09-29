@@ -34,14 +34,32 @@ export const startScheduler = (): void => {
   void writeSchedulerHeartbeat('idle');
 
   const interval = config.scheduler.intervalMinutes;
-  const cronExpression = interval === 1 ? '* * * * *' : `*/${interval} * * * *`;
+  if (interval > 1) {
+    logger.warn(
+      {
+        configuredInterval: interval
+      },
+      'SCHEDULER_INTERVAL_MINUTES>1 incompatível com horários diários; executando a cada minuto.'
+    );
+  }
 
-  cron.schedule(cronExpression, () => {
-    logger.info({ intervalMinutes: interval }, 'Executing scheduler job tick');
-    void runSchedulerOnce();
+  let isRunning = false;
+  cron.schedule('* * * * *', async () => {
+    if (isRunning) {
+      logger.warn('Ignorando tick do scheduler — execução anterior ainda em andamento');
+      return;
+    }
+
+    isRunning = true;
+    logger.info({ intervalMinutes: interval }, 'Executando tick do scheduler');
+    try {
+      await runSchedulerOnce();
+    } finally {
+      isRunning = false;
+    }
   });
 
-  logger.info('Scheduler initialized');
+  logger.info('Scheduler inicializado (tick a cada 1 minuto)');
   setInterval(() => {
     void writeSchedulerHeartbeat('idle');
   }, 60000).unref();
