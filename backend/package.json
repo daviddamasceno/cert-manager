@@ -9,7 +9,8 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "scheduler": "node dist/scheduler.js",
     "seed:sheets": "ts-node --project tsconfig.json scripts/seedSheets.ts",
-    "test": "ts-node --project tsconfig.json tests/crypto.test.ts"
+    "migrate:sheets:alert-schedule": "ts-node --project tsconfig.json scripts/migrateAlertModelSchedule.ts",
+    "test": "ts-node --project tsconfig.json tests/runAll.ts"
   },
   "dependencies": {
     "@types/cookie-parser": "^1.4.9",

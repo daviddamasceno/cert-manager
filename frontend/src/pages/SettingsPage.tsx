@@ -78,12 +78,10 @@ const SettingsPage: React.FC = () => {
               </dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500 dark:text-slate-400">Cron horário</dt>
-              <dd className="font-mono text-slate-700 dark:text-slate-200">{settings.scheduler.hourlyCron}</dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-slate-500 dark:text-slate-400">Cron diário</dt>
-              <dd className="font-mono text-slate-700 dark:text-slate-200">{settings.scheduler.dailyCron}</dd>
+              <dt className="text-slate-500 dark:text-slate-400">Frequência de verificação</dt>
+              <dd className="text-slate-700 dark:text-slate-200">
+                A cada {settings.scheduler.intervalMinutes} minuto{settings.scheduler.intervalMinutes > 1 ? 's' : ''}
+              </dd>
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-slate-500 dark:text-slate-400">Fuso horário padrão</dt>

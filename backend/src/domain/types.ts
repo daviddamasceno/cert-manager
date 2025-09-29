@@ -49,6 +49,9 @@ export interface AlertModel {
   repeatEveryDays?: number;
   templateSubject: string;
   templateBody: string;
+  scheduleType: 'hourly' | 'daily';
+  scheduleTime?: string | null;
+  enabled: boolean;
 }
 
 export interface ChannelInstance {

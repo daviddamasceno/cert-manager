@@ -22,7 +22,7 @@ scripts/   Utilitários (ex.: seed do Google Sheets)
 | Aba | Cabeçalhos |
 | --- | --- |
 | `certificates` | `id`, `name`, `owner_email`, `issued_at`, `expires_at`, `status`, `alert_model_id`, `notes`, `channel_ids` |
-| `alert_models` | `id`, `name`, `offset_days_before`, `offset_days_after`, `repeat_every_days`, `template_subject`, `template_body` |
+| `alert_models` | `id`, `name`, `offset_days_before`, `offset_days_after`, `repeat_every_days`, `template_subject`, `template_body`, `schedule_type`, `schedule_time`, `enabled` |
 | `channels` | `id`, `name`, `type`, `enabled`, `created_at`, `updated_at` |
 | `channel_params` | `channel_id`, `key`, `value`, `updated_at` |
 | `channel_secrets` | `channel_id`, `key`, `value_ciphertext`, `updated_at` |
@@ -30,6 +30,15 @@ scripts/   Utilitários (ex.: seed do Google Sheets)
 | `audit_logs` | `timestamp`, `actor_user_id`, `actor_email`, `entity`, `entity_id`, `action`, `diff_json`, `ip`, `user_agent`, `note` |
 
 > As abas `certificates` e `alert_models` continuam compatíveis com dados antigos (apenas adicionamos `channel_ids`).
+
+### Atualização de planilhas existentes
+
+Caso já utilize a planilha com dados anteriores, execute o script de migração para adicionar os novos campos de agendamento em `alert_models`:
+
+1. `cd backend`
+2. `npm run migrate:sheets:alert-schedule`
+
+O script garante a criação das colunas `schedule_type`, `schedule_time` e `enabled` (com valores padrões `hourly`, vazio e `true`) sem alterar as demais informações.
 
 ## Service Account e permissões
 1. No Google Cloud, crie um projeto e habilite a Sheets API.
@@ -56,7 +65,7 @@ scripts/   Utilitários (ex.: seed do Google Sheets)
 | `ENCRYPTION_KEY` | Chave AES-256 (32 bytes Base64) usada para criptografar segredos de canais. |
 | `CACHE_TTL_SECONDS` | TTL do cache in-memory dos repositórios. |
 | `TZ` | Fuso horário padrão da aplicação/scheduler. |
-| `SCHEDULER_ENABLED` / `SCHEDULER_*_CRON` | Ativação e cron expressions do scheduler. |
+| `SCHEDULER_ENABLED` / `SCHEDULER_INTERVAL_MINUTES` | Ativa o worker. Para suportar horários diários personalizados o tick é fixo em 1 minuto (valores maiores são ignorados). |
 | `METRICS_ENABLED` | Expõe (`true`) ou oculta (`false`) o endpoint `/api/metrics`. |
 | `LOG_LEVEL` | Nível de log (ex.: `info`, `debug`). |
 | `RATE_LIMIT_TEST_WINDOW_MS` / `RATE_LIMIT_TEST_MAX` | Janela e limite para testes de canais (`/test`). |
