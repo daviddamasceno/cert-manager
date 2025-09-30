@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import config from '../config/env';
+import config from '../config/config';
 
 const zone = config.timezone;
 
