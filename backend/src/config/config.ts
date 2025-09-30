@@ -86,14 +86,8 @@ const normalizeAppBaseUrl = (value: string, sourceName: string): string => {
 };
 
 const resolveAppBaseUrl = (): string => {
-  const rawValue = process.env.APP_BASE_URL ?? process.env.APP_URL;
-  const sourceName = process.env.APP_BASE_URL ? 'APP_BASE_URL' : process.env.APP_URL ? 'APP_URL' : 'APP_BASE_URL';
-
-  if (!rawValue) {
-    throw new Error('Missing required environment variable: APP_BASE_URL (or legacy APP_URL)');
-  }
-
-  return normalizeAppBaseUrl(rawValue, sourceName);
+  const rawValue = required(process.env.APP_BASE_URL, 'APP_BASE_URL');
+  return normalizeAppBaseUrl(rawValue, 'APP_BASE_URL');
 };
 
 const parseSameSite = (value: string | undefined): 'lax' | 'strict' => {

@@ -28,7 +28,7 @@ Preencha `backend/.env` a partir de `backend/.env.example`. Cada valor deve ser 
 
 | NOME | O QUE É | COMO OBTER/GERAR | COMANDO |
 | --- | --- | --- | --- |
-| `APP_BASE_URL`<br/>(aceita `APP_URL` para retrocompatibilidade) | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `APP_BASE_URL='https://localhost:3000'` (substitua pelo endereço real; exemplo ilustrativo)
+| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `APP_BASE_URL='https://localhost:3000'` (substitua pelo endereço real; exemplo ilustrativo)
 | `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene em local seguro. | `openssl rand -hex 64`
 | `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `ADMIN_EMAIL='admin@sua-empresa.com'` (ajuste para o e-mail corporativo desejado)
 | `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs`. | `cd backend && npm install && ADMIN_PASSWORD='SuaSenhaForteAqui' node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
