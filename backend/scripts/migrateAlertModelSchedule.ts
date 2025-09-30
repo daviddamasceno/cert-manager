@@ -1,5 +1,5 @@
 import { google, sheets_v4 } from 'googleapis';
-import config from '../src/config/env';
+import config from '../src/config/config';
 import logger from '../src/utils/logger';
 import { withRetry } from '../src/utils/retry';
 

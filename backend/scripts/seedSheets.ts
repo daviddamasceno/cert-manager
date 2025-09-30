@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { GaxiosError, GaxiosResponse } from 'gaxios';
 import { google, sheets_v4 } from 'googleapis';
 import { v4 as uuid } from 'uuid';
-import config from '../src/config/env';
+import config from '../src/config/config';
 import logger from '../src/utils/logger';
 import { withRetry } from '../src/utils/retry';
 
