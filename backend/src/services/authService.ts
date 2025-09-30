@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt, { JwtPayload, SignOptions, Secret } from 'jsonwebtoken';
 import { v4 as uuid } from 'uuid';
-import config from '../config/env';
+import config from '../config/config';
 import {
   RefreshTokenRepository,
   UserCredentialsRepository,

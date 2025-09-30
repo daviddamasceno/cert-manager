@@ -1,4 +1,4 @@
-import config from './config/env';
+import config from './config/config';
 import logger from './utils/logger';
 import { createApp } from './app';
 import { startScheduler } from './jobs/runner';

@@ -1,5 +1,5 @@
 import express, { Router, CookieOptions } from 'express';
-import config from '../config/env';
+import config from '../config/config';
 import { authService } from '../services/container';
 import { AuthError } from '../services/authService';
 import { parseDurationToMilliseconds } from '../utils/duration';

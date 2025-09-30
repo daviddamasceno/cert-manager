@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import config from '../config/env';
+import config from '../config/config';
 import { register } from '../utils/metrics';
 
 export const systemController = Router();
