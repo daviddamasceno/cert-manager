@@ -28,9 +28,9 @@ Preencha `backend/.env` a partir de `backend/.env.example`. Cada valor deve ser 
 
 | NOME | O QUE É | COMO OBTER/GERAR | COMANDO |
 | --- | --- | --- | --- |
-| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `read -p 'URL base autorizada (usar HTTPS): ' APP_BASE_URL && printf '%s\n' "$APP_BASE_URL"`
+| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `read -rp 'Origem HTTPS autorizada: ' APP_BASE_URL && printf 'APP_BASE_URL=%s\n' "$APP_BASE_URL"`
 | `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene em local seguro. | `openssl rand -hex 64`
-| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `read -p 'E-mail do administrador: ' ADMIN_EMAIL && printf '%s\n' "$ADMIN_EMAIL"`
+| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `read -rp 'E-mail do administrador: ' ADMIN_EMAIL && printf 'ADMIN_EMAIL=%s\n' "$ADMIN_EMAIL"`
 | `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs`. | `cd backend && read -s -p 'Senha inicial do admin: ' ADMIN_PASSWORD && printf '\n' && ADMIN_PASSWORD="$ADMIN_PASSWORD" node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, converta-o para Base64 sem quebras de linha. | `openssl base64 -A -in caminho/para/service-account.json`
 | `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha criada no Google Sheets. | `read -p 'ID da planilha (entre /d/ e /edit): ' SHEETS_SPREADSHEET_ID && printf '%s\n' "$SHEETS_SPREADSHEET_ID"`
@@ -131,3 +131,15 @@ As variáveis abaixo já possuem valores padrão definidos no código. Caso prec
 | Frontend não enxerga a API | `VITE_API_URL` não aponta para o backend correto. | Ajuste `frontend/.env` com a URL desejada e reconstrua o container/frontend local (`npm run dev` ou `docker compose up -d frontend`).
 
 > Dúvidas adicionais? Consulte os logs estruturados (`docker compose logs`) e os registros de auditoria na aba `audit_logs` para rastrear ações recentes.
+
+## 10. Testes (backend e frontend)
+- **Backend**
+  1. `cd backend`
+  2. `npm install`
+  3. Garanta que `backend/.env` contenha as variáveis principais preenchidas.
+  4. `npm run test` — executa a suíte de testes integrada (`ts-node`), reutilizando os defaults opcionais definidos no código.
+- **Frontend**
+  1. `cd frontend`
+  2. `npm install`
+  3. Ajuste `frontend/.env` apenas se precisar sobrescrever variáveis opcionais.
+  4. `npm run build` — valida a geração do bundle de produção pelo Vite.
