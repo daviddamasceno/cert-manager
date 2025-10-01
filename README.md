@@ -28,13 +28,13 @@ Preencha `backend/.env` a partir de `backend/.env.example`. Cada valor deve ser 
 
 | NOME | O QUE É | COMO OBTER/GERAR | COMANDO |
 | --- | --- | --- | --- |
-| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes) e defina-a previamente na variável de ambiente `APP_BASE_URL`. | ``printf 'APP_BASE_URL=%s\\n' "${APP_BASE_URL:?Defina previamente a origem HTTPS autorizada}"``
-| `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene-a com segurança. | `openssl rand -hex 64 | awk '{print "JWT_SECRET=" $0}'`
-| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Registre o endereço corporativo que será usado no primeiro acesso e defina-o na variável de ambiente `ADMIN_EMAIL`. | ``printf 'ADMIN_EMAIL=%s\\n' "${ADMIN_EMAIL:?Defina previamente o e-mail corporativo do administrador inicial}"``
-| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale as dependências do backend, defina a senha temporária em `ADMIN_PASSWORD` e gere o hash com `bcryptjs`. | `cd backend && npm install && node -e "const bcrypt=require('bcryptjs');const password=process.env.ADMIN_PASSWORD;if(!password){throw new Error('Defina ADMIN_PASSWORD antes de gerar o hash.');}console.log('ADMIN_PASSWORD_HASH='+bcrypt.hashSync(password,12));"`
-| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, informe o caminho no shell com `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` antes de converter sem quebras de linha. | `openssl base64 -A -in "${GOOGLE_SERVICE_ACCOUNT_JSON_PATH:?Forneça o caminho do arquivo JSON}" | awk '{print "GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=" $0}'`
-| `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha e atribua-o à variável `SHEETS_SPREADSHEET_ID` antes de gerar o par. | ``printf 'SHEETS_SPREADSHEET_ID=%s\\n' "${SHEETS_SPREADSHEET_ID:?Informe o identificador copiado da URL da planilha}"``
-| `ENCRYPTION_KEY` | Chave simétrica usada para criptografar segredos de canais (AES-256-GCM). | Gere 32 bytes aleatórios e converta para Base64 em uma única linha. | `openssl rand -base64 32 | awk '{print "ENCRYPTION_KEY=" $0}'`
+| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `APP_BASE_URL='https://localhost:3000'` (substitua pelo endereço real; exemplo ilustrativo)
+| `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene em local seguro. | `openssl rand -hex 64`
+| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `ADMIN_EMAIL='admin@sua-empresa.com'` (ajuste para o e-mail corporativo desejado)
+| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs`. | `cd backend && npm install && ADMIN_PASSWORD='SuaSenhaForteAqui' node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
+| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, converta-o para Base64 sem quebras de linha. | `openssl base64 -A -in caminho/para/service-account.json`
+| `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha criada no Google Sheets. | `SHEETS_SPREADSHEET_ID='1AbCdEfGhIjKlMnOpQrStUvWxYz'` (substitua pelo ID copiado da URL)
+| `ENCRYPTION_KEY` | Chave simétrica usada para criptografar segredos de canais (AES-256-GCM). | Gere 32 bytes aleatórios e converta para Base64. | `openssl rand -base64 32`
 
 > Armazene cada valor em um cofre seguro. Sempre que atualizar algum segredo, lembre-se de rotacioná-lo também nos ambientes de execução.
 
