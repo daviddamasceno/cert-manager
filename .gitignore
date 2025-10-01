@@ -8,3 +8,6 @@ yarn-error.log*
 *.local
 backend/backend-dev.log
 frontend/frontend-dev.log
+frontend/public/apple-touch-icon.png
+frontend/public/favicon-*.png
+frontend/public/favicon.ico

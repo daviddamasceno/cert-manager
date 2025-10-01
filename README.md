@@ -151,3 +151,22 @@ As variáveis abaixo já possuem valores padrão definidos diretamente no códig
   2. `npm install`
   3. Ajuste `frontend/.env` apenas se precisar sobrescrever variáveis opcionais.
   4. `npm run build` — valida a geração do bundle de produção pelo Vite.
+
+## 11. Favicon e identidade visual
+O frontend utiliza um favicon customizado compatível com navegadores modernos. Para evitar o versionamento de binários, os ativos ficam codificados em Base64 dentro de `frontend/public/favicon-assets.json`. Sempre que você instala ou executa scripts do frontend, o utilitário `npm run sync:favicons` (invocado automaticamente por `npm install`, `npm run dev`, `npm run preview` e `npm run build`) decodifica esse arquivo gerando os ícones físicos em `frontend/public/`:
+
+- `favicon.ico` — pacote multi-resoluções usado pelo link principal.
+- `favicon-16x16.png`, `favicon-32x32.png`, `favicon-48x48.png`, `favicon-64x64.png`, `favicon-128x128.png`, `favicon-256x256.png` — cobrem os tamanhos típicos exigidos pelos navegadores.
+- `apple-touch-icon.png` — ícone recomendado para atalhos adicionados em dispositivos Apple.
+
+Os arquivos gerados são ignorados pelo Git via `.gitignore`, mas permanecem acessíveis durante o desenvolvimento e no build final.
+
+Para trocar o favicon no futuro:
+1. Gere novos arquivos nas mesmas dimensões (16, 32, 48, 64, 128, 256 e 180px para Apple touch).
+2. Converta cada arquivo para Base64 (ex.: `base64 -i favicon-32x32.png`) e atualize os valores correspondentes em `frontend/public/favicon-assets.json`.
+3. Rode `npm run sync:favicons` para regenerar os arquivos binários na pasta `frontend/public/`.
+4. Limpe o cache do navegador (ou incremente o versionamento do build) para garantir que os ícones atualizados sejam carregados.
+
+Ferramentas sugeridas:
+- [favicon.io](https://favicon.io/) permite criar ícones a partir de texto, imagens ou SVG e exportar os PNGs necessários.
+- Qualquer editor vetorial (Figma, Illustrator, Inkscape) exportando versões em PNG + `.ico` funciona bem para manter a consistência do design minimalista/dark do projeto.

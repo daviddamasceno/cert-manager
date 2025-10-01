@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm run sync:favicons",
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "npm run sync:favicons && vite build",
+    "prepreview": "npm run sync:favicons",
+    "preview": "vite preview",
+    "sync:favicons": "node scripts/sync-favicons.mjs",
+    "postinstall": "npm run sync:favicons"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.18",
