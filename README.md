@@ -28,18 +28,20 @@ Preencha `backend/.env` a partir de `backend/.env.example`. Cada valor deve ser 
 
 | NOME | O QUE É | COMO OBTER/GERAR | COMANDO |
 | --- | --- | --- | --- |
-| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `APP_BASE_URL='https://localhost:3000'` (substitua pelo endereço real; exemplo ilustrativo)
-| `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene em local seguro. | `openssl rand -hex 64`
-| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `ADMIN_EMAIL='admin@sua-empresa.com'` (ajuste para o e-mail corporativo desejado)
-| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs`. | `cd backend && npm install && ADMIN_PASSWORD='SuaSenhaForteAqui' node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
-| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, converta-o para Base64 sem quebras de linha. | `openssl base64 -A -in caminho/para/service-account.json`
-| `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha criada no Google Sheets. | `SHEETS_SPREADSHEET_ID='1AbCdEfGhIjKlMnOpQrStUvWxYz'` (substitua pelo ID copiado da URL)
-| `ENCRYPTION_KEY` | Chave simétrica usada para criptografar segredos de canais (AES-256-GCM). | Gere 32 bytes aleatórios e converta para Base64. | `openssl rand -base64 32`
+| `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes) e defina-a previamente na variável de ambiente `APP_BASE_URL`. | ``printf 'APP_BASE_URL=%s\\n' "${APP_BASE_URL:?Defina previamente a origem HTTPS autorizada}"``
+| `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene-a com segurança. | `openssl rand -hex 64 | awk '{print "JWT_SECRET=" $0}'`
+| `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Registre o endereço corporativo que será usado no primeiro acesso e defina-o na variável de ambiente `ADMIN_EMAIL`. | ``printf 'ADMIN_EMAIL=%s\\n' "${ADMIN_EMAIL:?Defina previamente o e-mail corporativo do administrador inicial}"``
+| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale as dependências do backend, defina a senha temporária em `ADMIN_PASSWORD` e gere o hash com `bcryptjs`. | `cd backend && npm install && node -e "const bcrypt=require('bcryptjs');const password=process.env.ADMIN_PASSWORD;if(!password){throw new Error('Defina ADMIN_PASSWORD antes de gerar o hash.');}console.log('ADMIN_PASSWORD_HASH='+bcrypt.hashSync(password,12));"`
+| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, informe o caminho no shell com `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` antes de converter sem quebras de linha. | `openssl base64 -A -in "${GOOGLE_SERVICE_ACCOUNT_JSON_PATH:?Forneça o caminho do arquivo JSON}" | awk '{print "GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=" $0}'`
+| `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha e atribua-o à variável `SHEETS_SPREADSHEET_ID` antes de gerar o par. | ``printf 'SHEETS_SPREADSHEET_ID=%s\\n' "${SHEETS_SPREADSHEET_ID:?Informe o identificador copiado da URL da planilha}"``
+| `ENCRYPTION_KEY` | Chave simétrica usada para criptografar segredos de canais (AES-256-GCM). | Gere 32 bytes aleatórios e converta para Base64 em uma única linha. | `openssl rand -base64 32 | awk '{print "ENCRYPTION_KEY=" $0}'`
 
 > Armazene cada valor em um cofre seguro. Sempre que atualizar algum segredo, lembre-se de rotacioná-lo também nos ambientes de execução.
 
 ## 4. Variáveis OPCIONAIS (defaults no código)
-As variáveis abaixo já possuem valores padrão definidos no código. Caso precise alterar, sobrescreva manualmente no `.env` correspondente.
+As variáveis abaixo já possuem valores padrão definidos diretamente no código. Sobrescreva manualmente no `.env` apropriado apenas quando precisar alterar o comportamento padrão.
+
+### Backend
 
 | NOME | DEFAULT | DESCRIÇÃO |
 | --- | --- | --- |
@@ -50,17 +52,22 @@ As variáveis abaixo já possuem valores padrão definidos no código. Caso prec
 | `JWT_COOKIE_SAMESITE` | `lax` | Política SameSite aplicada aos cookies de sessão.
 | `CACHE_TTL_SECONDS` | `60` | Tempo de vida do cache in-memory para leituras no Sheets.
 | `TZ` | `America/Fortaleza` | Fuso horário base usado no scheduler e registros.
-| `SCHEDULER_ENABLED` | `false` | Liga/desliga o worker de agendamentos.
+| `SCHEDULER_ENABLED` | `false` | Liga ou desliga o worker de agendamentos.
 | `SCHEDULER_INTERVAL_MINUTES` | `1` | Frequência mínima de execução do scheduler (em minutos).
 | `METRICS_ENABLED` | `true` | Controla a exposição do endpoint `/api/metrics`.
 | `LOG_LEVEL` | `info` | Nível mínimo de log do backend.
 | `RATE_LIMIT_GLOBAL_WINDOW_MS` | `60000` | Janela (ms) do rate limit global.
 | `RATE_LIMIT_GLOBAL_MAX` | `300` | Número máximo de requisições por janela global.
-| `RATE_LIMIT_TEST_WINDOW_MS` | `60000` | Janela (ms) para testes de canais.
+| `RATE_LIMIT_TEST_WINDOW_MS` | `60000` | Janela (ms) aplicada aos testes de canais.
 | `RATE_LIMIT_TEST_MAX` | `5` | Número máximo de testes de canais por janela.
 | `RATE_LIMIT_SENSITIVE_WINDOW_MS` | `60000` | Janela (ms) aplicada a rotas sensíveis (`/test`, `/send`).
 | `RATE_LIMIT_SENSITIVE_MAX` | `10` | Número máximo de requisições sensíveis por janela.
-| `VITE_API_URL` | `http://localhost:4000` | URL padrão do backend consumida pelo frontend (sobrescreva em `frontend/.env`).
+
+### Frontend
+
+| NOME | DEFAULT | DESCRIÇÃO |
+| --- | --- | --- |
+| `VITE_API_URL` | `http://localhost:4000` | URL padrão do backend consumida pelo frontend. Ajuste `frontend/.env` para apontar para outra origem.
 
 ## 5. Passo a passo: preparar o “banco” (Google Sheets + Service Account)
 1. **Criar projeto no Google Cloud**
@@ -88,9 +95,10 @@ As variáveis abaixo já possuem valores padrão definidos no código. Caso prec
 
 7. **Executar o seed de estrutura**
    - Ainda em `backend/`, rode `npm run build` se desejar gerar o código compilado.
+   - Defina a variável `ADMIN_INITIAL_PASSWORD` com a senha temporária desejada (`export ADMIN_INITIAL_PASSWORD=<senha>`).
+   - Opcionalmente defina `ADMIN_INITIAL_NAME` antes do próximo comando para ajustar o nome exibido nos registros iniciais (`export ADMIN_INITIAL_NAME=<nome>`).
    - Execute o seed que cria abas, cabeçalhos e garante o usuário admin inicial:<br>
-     `ADMIN_INITIAL_PASSWORD='SuaSenhaTemporariaForte' npm run seed:sheets`
-   - Opcionalmente defina `ADMIN_INITIAL_NAME='Nome do Admin'` antes do comando para personalizar o nome exibido.
+     `npm run seed:sheets`
 
 8. **Executar migrações adicionais (quando necessário)**
    - Sempre que novas colunas forem adicionadas a modelos existentes, execute `npm run migrate:sheets:alert-schedule` para ajustar as abas legadas.
