@@ -58,6 +58,8 @@ const HEADERS: HeaderMap = {
   smtp_sends_history: ['id', 'channel_id', 'to', 'subject', 'status', 'error', 'timestamp']
 };
 
+const ADMIN_PASSWORD_BCRYPT_ROUNDS = 12;
+
 const rangeFor = (tab: string): string => `${tab}!A:Z`;
 
 const normalizeRow = (header: string[], row: string[] = []): string[] =>
@@ -209,7 +211,7 @@ async function seedAdminUser(sheets: SheetsClient, spreadsheetId: string): Promi
   const adminEmail = config.adminEmail;
   const adminName = process.env.ADMIN_INITIAL_NAME || 'Administrator';
   const now = new Date().toISOString();
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const passwordHash = await bcrypt.hash(adminPassword, ADMIN_PASSWORD_BCRYPT_ROUNDS);
 
   const usersHeader = HEADERS.users;
   const { rows: userRows } = await readSheetWithHeader(sheets, spreadsheetId, 'users', usersHeader);
