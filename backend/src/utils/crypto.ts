@@ -1,5 +1,5 @@
 ﻿import crypto from 'crypto';
-import config from '../config/env';
+import config from '../config/config';
 
 const KEY_LENGTH = 32;
 const IV_LENGTH = 12;

@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import config from '../config/env';
+import config from '../config/config';
 import logger from '../utils/logger';
 import { jobErrorCounter, jobRunCounter } from '../utils/metrics';
 import { AlertSchedulerJob } from './alertScheduler';

@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import pino from 'pino';
-import config from '../config/env';
+import config from '../config/config';
 
 const formatTimestamp = (): string => {
   const zoned = DateTime.now().setZone(config.timezone, { keepLocalTime: false });

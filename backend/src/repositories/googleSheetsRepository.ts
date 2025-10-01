@@ -2,7 +2,7 @@
 import { google, sheets_v4 } from 'googleapis';
 import NodeCache from 'node-cache';
 import { v4 as uuid } from 'uuid';
-import config from '../config/env';
+import config from '../config/config';
 import {
   AlertModel,
   AuditLog,
