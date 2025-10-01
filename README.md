@@ -46,7 +46,7 @@ As variáveis abaixo já possuem valores padrão definidos diretamente no códig
 | NOME | DEFAULT | DESCRIÇÃO |
 | --- | --- | --- |
 | `PORT` | `8080` | Porta HTTP exposta pelo backend.
-| `NODE_ENV` | `development` | Ambiente lógico (`development`, `production`, ...).
+| `NODE_ENV` | `development` | Ambiente lógico (`development`, `production`).
 | `JWT_EXPIRES_IN` | `15m` | Duração do token de acesso em formato compatível com `jsonwebtoken`.
 | `JWT_REFRESH_EXPIRES_IN` | `14d` | Duração padrão do refresh token.
 | `JWT_COOKIE_SAMESITE` | `lax` | Política SameSite aplicada aos cookies de sessão.
