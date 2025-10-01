@@ -31,7 +31,7 @@ Preencha `backend/.env` a partir de `backend/.env.example`. Cada valor deve ser 
 | `APP_BASE_URL` | Origem HTTPS autorizada para o frontend. | Determine a URL pública final do frontend (produção ou ambiente de testes). | `APP_BASE_URL='https://localhost:3000'` (substitua pelo endereço real; exemplo ilustrativo)
 | `JWT_SECRET` | Segredo para assinar tokens JWT de sessão. | Gere uma sequência aleatória forte e armazene em local seguro. | `openssl rand -hex 64`
 | `ADMIN_EMAIL` | E-mail que identifica o administrador padrão. | Defina o endereço corporativo que será usado para o login inicial. | `ADMIN_EMAIL='admin@sua-empresa.com'` (ajuste para o e-mail corporativo desejado)
-| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs`. | `cd backend && npm install && ADMIN_PASSWORD='SuaSenhaForteAqui' node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
+| `ADMIN_PASSWORD_HASH` | Hash BCrypt da senha inicial do administrador. | Instale dependências do backend, defina uma senha forte e gere o hash com `bcryptjs` utilizando 12 rounds (mesma configuração do backend). | `cd backend && npm install && ADMIN_PASSWORD='SuaSenhaForteAqui' node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));"`
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Credenciais da Service Account codificadas em Base64. | Após baixar o arquivo JSON da Service Account, converta-o para Base64 sem quebras de linha. | `openssl base64 -A -in caminho/para/service-account.json`
 | `SHEETS_SPREADSHEET_ID` | Identificador da planilha Google Sheets usada como banco. | Copie o ID presente na URL da planilha criada no Google Sheets. | `SHEETS_SPREADSHEET_ID='1AbCdEfGhIjKlMnOpQrStUvWxYz'` (substitua pelo ID copiado da URL)
 | `ENCRYPTION_KEY` | Chave simétrica usada para criptografar segredos de canais (AES-256-GCM). | Gere 32 bytes aleatórios e converta para Base64. | `openssl rand -base64 32`
@@ -95,7 +95,7 @@ As variáveis abaixo já possuem valores padrão definidos diretamente no códig
 
 7. **Executar o seed de estrutura**
    - Ainda em `backend/`, rode `npm run build` se desejar gerar o código compilado.
-   - Defina a variável `ADMIN_INITIAL_PASSWORD` com a senha temporária desejada (`export ADMIN_INITIAL_PASSWORD=<senha>`).
+   - Defina a variável `ADMIN_INITIAL_PASSWORD` com a senha temporária desejada (`export ADMIN_INITIAL_PASSWORD=<senha>`). Utilize a mesma senha usada para gerar `ADMIN_PASSWORD_HASH` para evitar divergência entre o `.env` e o registro criado na planilha.
    - Opcionalmente defina `ADMIN_INITIAL_NAME` antes do próximo comando para ajustar o nome exibido nos registros iniciais (`export ADMIN_INITIAL_NAME=<nome>`).
    - Execute o seed que cria abas, cabeçalhos e garante o usuário admin inicial:<br>
      `npm run seed:sheets`
